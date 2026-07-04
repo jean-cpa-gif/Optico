@@ -26,6 +26,8 @@ interface OperationsContextType {
   } | null;
   showToast: (mensagem: string, action?: { label: string; onClick: () => void }) => void;
   hideToast: () => void;
+  dismissedBannerKey: string | null;
+  setDismissedBannerKey: (key: string | null) => void;
 }
 
 const OperationsContext = createContext<OperationsContextType | undefined>(undefined);
@@ -191,6 +193,7 @@ export function OperationsProvider({ children }: { children: React.ReactNode }) 
 
   const [undoStack, setUndoStack] = useState<Operacao[][]>([]);
   const [toast, setToast] = useState<{ id: string; mensagem: string; action?: { label: string; onClick: () => void } } | null>(null);
+  const [dismissedBannerKey, setDismissedBannerKey] = useState<string | null>(null);
 
   useEffect(() => {
     localStorage.setItem('opcoes-control-data', JSON.stringify(operacoes));
@@ -552,7 +555,9 @@ export function OperationsProvider({ children }: { children: React.ReactNode }) 
       podeDesfazer: undoStack.length > 0,
       toast,
       showToast,
-      hideToast
+      hideToast,
+      dismissedBannerKey,
+      setDismissedBannerKey
     }}>
       {children}
     </OperationsContext.Provider>

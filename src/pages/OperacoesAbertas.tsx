@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useOperations } from '@/store/OperationsContext';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { differenceInDays } from 'date-fns';
 import { Operacao, EventoOperacao } from '@/types';
-import { X, ChevronDown, ChevronUp, Pencil, Trash2, Clock, Plus, AlertTriangle } from 'lucide-react';
+import { X, ChevronDown, ChevronUp, Pencil, Trash2, Clock, Plus, AlertTriangle, SlidersHorizontal } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
+import VencimentoAlerta from '@/components/VencimentoAlerta';
 import { 
   ModalAumentarPosicao, 
   ModalEditarOperacao, 
@@ -14,6 +16,22 @@ import {
 export default function OperacoesAbertas() {
   const { operacoes, rolarOperacao, encerrarOperacao, aumentarPosicao, editarOperacao, excluirOperacao, editarEvento, excluirEvento } = useOperations();
   const abertas = operacoes.filter(op => op.status === 'aberta');
+  const location = useLocation();
+
+  const [direcao, setDirecao] = useState<'todas' | 'V' | 'C'>('todas');
+  const [tipoOpcao, setTipoOpcao] = useState<'todas' | 'PUT' | 'CALL'>('todas');
+  const [ordenacao, setOrdenacao] = useState<'proximos' | 'distantes'>(() => {
+    if (location.state?.sortByExpiry) {
+      return 'proximos';
+    }
+    return 'proximos';
+  });
+  const [showFilters, setShowFilters] = useState(() => {
+    if (location.state?.sortByExpiry) {
+      return true;
+    }
+    return false;
+  });
 
   const [encerrarModal, setEncerrarModal] = useState<{ op: Operacao | null; open: boolean }>({ op: null, open: false });
   const [rolarModal, setRolarModal] = useState<{ op: Operacao | null; open: boolean }>({ op: null, open: false });
@@ -24,14 +42,172 @@ export default function OperacoesAbertas() {
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  // Filter and sort the open operations in real-time
+  const filteredAndSorted = abertas.filter(op => {
+    const matchDirecao = direcao === 'todas' || op.direcaoInicial === direcao;
+    const matchTipo = tipoOpcao === 'todas' || op.tipoOpcao === tipoOpcao;
+    return matchDirecao && matchTipo;
+  }).sort((a, b) => {
+    const tA = new Date(a.vencimentoAtual).getTime();
+    const tB = new Date(b.vencimentoAtual).getTime();
+    if (ordenacao === 'proximos') {
+      return tA - tB;
+    } else {
+      return tB - tA;
+    }
+  });
+
+  // Calculate total award for currently visible operations
+  const totalPremioVisivel = filteredAndSorted.reduce((acc, op) => acc + op.premioLiquidoAcumulado, 0);
+  const activeFiltersCount = (direcao !== 'todas' ? 1 : 0) + (tipoOpcao !== 'todas' ? 1 : 0) + (ordenacao !== 'proximos' ? 1 : 0);
+
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Operações Abertas</h2>
+    <div id="operacoes-abertas-container" className="space-y-6">
+      {/* NEAR-EXPIRY WARNING ALERTER */}
+      <VencimentoAlerta 
+        onBannerClick={() => {
+          setOrdenacao('proximos');
+          setShowFilters(true);
+        }} 
+      />
+
+      {/* HEADER SECTION with dynamic sum badge */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="text-2xl font-bold">Operações Abertas</h2>
+          <span 
+            id="open-operations-sum-pill"
+            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold shadow-sm border ${
+              totalPremioVisivel >= 0 
+                ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border-emerald-200/50 dark:border-emerald-900/10' 
+                : 'bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 border-rose-200/50 dark:border-rose-900/10'
+            }`}
+          >
+            {formatCurrency(totalPremioVisivel)} em aberto
+          </span>
+        </div>
+      </div>
+
+      {/* FILTER CONTROLLER BAR */}
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div className="flex items-center gap-2">
+            <button 
+              id="filter-toggle-button"
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold rounded border transition-colors cursor-pointer ${
+                showFilters || activeFiltersCount > 0
+                  ? 'bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-950/30 dark:border-blue-900/30 dark:text-blue-400'
+                  : 'bg-white border-slate-200 dark:bg-slate-800 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
+              }`}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              Filtros
+              {activeFiltersCount > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-blue-600 text-white dark:bg-blue-500">
+                  {activeFiltersCount}
+                </span>
+              )}
+            </button>
+
+            {activeFiltersCount > 0 && (
+              <button
+                id="clear-filters-button"
+                onClick={() => {
+                  setDirecao('todas');
+                  setTipoOpcao('todas');
+                  setOrdenacao('proximos');
+                }}
+                className="text-xs font-medium text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 flex items-center gap-1 transition-colors cursor-pointer px-2 py-1"
+              >
+                Limpar filtros
+              </button>
+            )}
+          </div>
+
+          {/* Discreet chips displaying active states if panel is collapsed */}
+          {!showFilters && activeFiltersCount > 0 && (
+            <div className="flex gap-1.5 flex-wrap">
+              {direcao !== 'todas' && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium border border-slate-200/50 dark:border-slate-700/50">
+                  Direção: {direcao === 'V' ? 'Vendidas' : 'Compradas'}
+                </span>
+              )}
+              {tipoOpcao !== 'todas' && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium border border-slate-200/50 dark:border-slate-700/50">
+                  Opção: {tipoOpcao}
+                </span>
+              )}
+              {ordenacao !== 'proximos' && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium border border-slate-200/50 dark:border-slate-700/50">
+                  Mais distantes primeiro
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Expandable Filter Details panel */}
+        {showFilters && (
+          <div className="p-4 bg-slate-50/50 dark:bg-slate-900/20 rounded-lg border border-slate-200/60 dark:border-slate-800/60 grid grid-cols-1 sm:grid-cols-3 gap-4 animate-fade-in">
+            {/* Direção Filter */}
+            <div className="space-y-1.5">
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Direção</label>
+              <div className="flex gap-1">
+                {(['todas', 'V', 'C'] as const).map((dir) => (
+                  <button
+                    key={dir}
+                    onClick={() => setDirecao(dir)}
+                    className={`flex-1 py-1.5 text-xs font-semibold rounded border transition-colors cursor-pointer ${
+                      direcao === dir
+                        ? 'bg-blue-600 text-white border-blue-600 dark:bg-blue-500 dark:border-blue-500'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    {dir === 'todas' ? 'Todas' : dir === 'V' ? 'Vendidas' : 'Compradas'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Tipo Filter */}
+            <div className="space-y-1.5">
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tipo de Opção</label>
+              <div className="flex gap-1">
+                {(['todas', 'PUT', 'CALL'] as const).map((tipo) => (
+                  <button
+                    key={tipo}
+                    onClick={() => setTipoOpcao(tipo)}
+                    className={`flex-1 py-1.5 text-xs font-semibold rounded border transition-colors cursor-pointer ${
+                      tipoOpcao === tipo
+                        ? 'bg-blue-600 text-white border-blue-600 dark:bg-blue-500 dark:border-blue-500'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    {tipo === 'todas' ? 'Todas' : tipo}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Ordenação Filter */}
+            <div className="space-y-1.5">
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Vencimento</label>
+              <select
+                value={ordenacao}
+                onChange={(e) => setOrdenacao(e.target.value as 'proximos' | 'distantes')}
+                className="w-full text-xs font-semibold rounded border border-slate-200 bg-white px-3 py-1.5 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              >
+                <option value="proximos">Mais próximos primeiro (padrão)</option>
+                <option value="distantes">Mais distantes primeiro</option>
+              </select>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {abertas.map(op => (
+        {filteredAndSorted.map(op => (
           <OperacaoCard 
             key={op.id} 
             op={op} 
@@ -46,9 +222,11 @@ export default function OperacoesAbertas() {
             onToggleExpand={() => setExpandedId(expandedId === op.id ? null : op.id)}
           />
         ))}
-        {abertas.length === 0 && (
-          <div className="col-span-full py-12 text-center text-gray-500 border border-dashed border-gray-300 dark:border-gray-700 rounded-xl">
-            Nenhuma operação aberta no momento.
+        {filteredAndSorted.length === 0 && (
+          <div className="col-span-full py-12 text-center text-slate-500 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900/20">
+            {abertas.length === 0 
+              ? 'Nenhuma operação aberta no momento.' 
+              : 'Nenhuma operação aberta corresponde aos filtros selecionados.'}
           </div>
         )}
       </div>

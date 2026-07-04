@@ -2,10 +2,13 @@ import { useOperations } from '@/store/OperationsContext';
 import { formatCurrency } from '@/lib/utils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { useTheme } from '@/components/ThemeProvider';
+import { useNavigate } from 'react-router-dom';
+import VencimentoAlerta from '@/components/VencimentoAlerta';
 
 export default function Dashboard() {
   const { operacoes } = useOperations();
   const { theme } = useTheme();
+  const navigate = useNavigate();
 
   const abertas = operacoes.filter(op => op.status === 'aberta');
   const encerradas = operacoes.filter(op => op.status === 'encerrada');
@@ -43,6 +46,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      <VencimentoAlerta onBannerClick={() => navigate('/abertas', { state: { sortByExpiry: true } })} />
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="bg-white dark:bg-slate-800 p-3 rounded-md card-shadow border border-slate-200 dark:border-slate-700">
           <div className="text-[10px] font-semibold text-slate-400 uppercase mb-0.5">Resultado Acumulado</div>
