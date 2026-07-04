@@ -1,0 +1,6 @@
+{
+  "name": "Opções Control",
+  "description": "Aplicativo para controle de operações de opções na bolsa de valores (PUTs e CALLs).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
