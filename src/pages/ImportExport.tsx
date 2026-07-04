@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { useOperations } from '@/store/OperationsContext';
 import { Download, Upload, AlertTriangle, Trash2 } from 'lucide-react';
 

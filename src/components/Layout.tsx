@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
-import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, PlusCircle, FolderOpen, History, Settings2, Sun, Moon, Menu, X } from 'lucide-react';
+import { NavLink, useLocation } from 'react-router-dom';
+import { LayoutDashboard, PlusCircle, FolderOpen, History, Settings2, Sun, Moon, Menu, X, Undo2 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 import { cn } from '@/lib/utils';
+import { useOperations } from '@/store/OperationsContext';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { theme, setTheme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const location = useLocation();
+  const { podeDesfazer, desfazer, toast, hideToast } = useOperations();
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -16,7 +19,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { name: 'Importar / Exportar', href: '/import-export', icon: Settings2 },
   ];
 
+  const currentNav = navigation.find(item => item.href === location.pathname);
+  const title = currentNav ? currentNav.name : 'Opções Control';
+
   const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark');
+
 
   return (
     <div className="h-screen w-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex overflow-hidden">
@@ -65,7 +72,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 h-full">
+      <main className="flex-1 flex flex-col min-w-0 h-full relative">
         <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 sm:px-8 shrink-0">
           <div className="flex items-center">
             <button
@@ -74,10 +81,24 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             >
               <Menu className="w-6 h-6" />
             </button>
-            <h1 className="text-xl font-semibold text-slate-800 dark:text-slate-100">Visão Geral</h1>
+            <h1 className="text-xl font-semibold text-slate-800 dark:text-slate-100">{title}</h1>
           </div>
           
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={desfazer}
+              disabled={!podeDesfazer}
+              className={cn(
+                "p-2 rounded-full transition-colors flex items-center justify-center",
+                podeDesfazer 
+                  ? "bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-500 hover:bg-amber-100 dark:hover:bg-amber-900/40 cursor-pointer" 
+                  : "text-slate-300 dark:text-slate-700 cursor-not-allowed"
+              )}
+              title={podeDesfazer ? "Desfazer última ação (Ctrl+Z)" : "Nada para desfazer"}
+            >
+              <Undo2 className="w-5 h-5" />
+            </button>
+
             <button
               onClick={toggleTheme}
               className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-500"
@@ -91,6 +112,24 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div className="flex-1 p-6 space-y-6 overflow-y-auto">
           {children}
         </div>
+
+        {/* Floating Interactive Toast */}
+        {toast && (
+          <div className="fixed bottom-6 right-6 z-[9999] bg-slate-900 text-slate-100 dark:bg-white dark:text-slate-900 px-4 py-3 rounded-md shadow-lg border border-slate-800 dark:border-slate-200 flex items-center justify-between gap-4 max-w-sm transition-all animate-bounce">
+            <span className="text-xs font-semibold">{toast.mensagem}</span>
+            {toast.action && (
+              <button 
+                onClick={() => {
+                  toast.action?.onClick();
+                  hideToast();
+                }}
+                className="text-[10px] font-bold uppercase tracking-wider text-amber-400 hover:text-amber-300 dark:text-amber-600 dark:hover:text-amber-700 bg-slate-800 dark:bg-slate-100 px-2 py-1 rounded-sm"
+              >
+                {toast.action.label}
+              </button>
+            )}
+          </div>
+        )}
       </main>
     </div>
   );

@@ -25,7 +25,7 @@ export default function Dashboard() {
 
   const dataGraficoMes = Object.entries(resultPorMes)
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([mes, valor]) => ({ mes, valor }));
+    .map(([mes, valor]): { mes: string; valor: number } => ({ mes, valor: valor as number }));
 
   // Chart: Result per Asset
   const resultPorAtivo = encerradas.reduce((acc, op) => {
@@ -34,8 +34,8 @@ export default function Dashboard() {
   }, {} as Record<string, number>);
 
   const dataGraficoAtivo = Object.entries(resultPorAtivo)
-    .sort((a, b) => b[1] - a[1]) // sort by profit
-    .map(([name, value]) => ({ name, value }));
+    .sort((a, b) => (b[1] as number) - (a[1] as number)) // sort by profit
+    .map(([name, value]): { name: string; value: number } => ({ name, value: value as number }));
 
   const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#6366f1', '#ec4899', '#ef4444'];
   const textColor = theme === 'dark' ? '#94a3b8' : '#64748b';
