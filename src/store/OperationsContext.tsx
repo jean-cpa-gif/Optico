@@ -339,11 +339,14 @@ export function OperationsProvider({ children }: { children: React.ReactNode }) 
     updateOperacoesWithUndo(prev => prev.map(op => {
       if (op.id !== id || op.status !== 'aberta') return op;
 
+      const isReducao = quantidade < 0;
       const novoEvento: EventoOperacao = {
         id: uuidv4(),
         tipo: 'aumento',
         data,
-        detalhes: `Aumento de posição: +${quantidade} unidades @ R$ ${preco.toFixed(2)}`,
+        detalhes: isReducao
+          ? `Redução de posição: -${Math.abs(quantidade)} unidades @ R$ ${preco.toFixed(2)}`
+          : `Aumento de posição: +${quantidade} unidades @ R$ ${preco.toFixed(2)}`,
         quantidade,
         preco,
       };
@@ -356,7 +359,7 @@ export function OperationsProvider({ children }: { children: React.ReactNode }) 
       return recalcularOperacao(opAtualizada);
     }));
 
-    showToast("Posição aumentada com sucesso!", {
+    showToast(quantidade >= 0 ? "Posição aumentada com sucesso!" : "Posição reduzida com sucesso!", {
       label: "Desfazer",
       onClick: desfazer
     });
