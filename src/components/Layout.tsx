@@ -1,21 +1,40 @@
 import React, { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { LayoutDashboard, PlusCircle, FolderOpen, History, Settings2, Sun, Moon, Menu, X, Undo2 } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, FolderOpen, History, Settings2, Sun, Moon, Menu, X, Undo2, Landmark } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 import { cn } from '@/lib/utils';
 import { useOperations } from '@/store/OperationsContext';
+import { useDividas } from '@/store/DividasContext';
+import CloudSyncMenu from './CloudSyncMenu';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { theme, setTheme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
-  const { podeDesfazer, desfazer, toast, hideToast } = useOperations();
+  const { podeDesfazer: podeDesfazerOp, desfazer: desfazerOp, toast, hideToast } = useOperations();
+  const { podeDesfazer: podeDesfazerDividas, desfazer: desfazerDividas } = useDividas();
+
+  const isDividasRoute = location.pathname.startsWith('/dividas');
+  const podeDesfazer = isDividasRoute ? podeDesfazerDividas : (podeDesfazerOp || podeDesfazerDividas);
+
+  const handleGlobalDesfazer = () => {
+    if (isDividasRoute) {
+      if (podeDesfazerDividas) desfazerDividas();
+    } else {
+      if (podeDesfazerOp) {
+        desfazerOp();
+      } else if (podeDesfazerDividas) {
+        desfazerDividas();
+      }
+    }
+  };
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Nova Operação', href: '/nova', icon: PlusCircle },
     { name: 'Operações Abertas', href: '/abertas', icon: FolderOpen },
     { name: 'Histórico', href: '/historico', icon: History },
+    { name: 'Dívidas', href: '/dividas', icon: Landmark },
     { name: 'Importar / Exportar', href: '/import-export', icon: Settings2 },
   ];
 
@@ -84,9 +103,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <h1 className="text-xl font-semibold text-slate-800 dark:text-slate-100">{title}</h1>
           </div>
           
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            <CloudSyncMenu />
+
             <button
-              onClick={desfazer}
+              onClick={handleGlobalDesfazer}
               disabled={!podeDesfazer}
               className={cn(
                 "p-2 rounded-full transition-colors flex items-center justify-center",
@@ -101,7 +122,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
             <button
               onClick={toggleTheme}
-              className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-500"
+              className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-500 cursor-pointer"
               title="Alternar Tema"
             >
               {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}

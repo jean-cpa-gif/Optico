@@ -2,12 +2,19 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Operacao, EventoOperacao, Rolagem } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 
+interface EncerramentoVinculoDivida {
+  valorVinculadoDivida: number; // positive for profit amortized, negative for loss registered as debt
+  dividaVinculadaId: string;
+  valorContadoComoResultadoOpcoes: number;
+}
+
 interface OperationsContextType {
   operacoes: Operacao[];
   addOperacao: (op: Omit<Operacao, 'id' | 'status' | 'premioLiquidoAcumulado' | 'quantidadeAtual' | 'strikeAtual' | 'precoMedioAtual' | 'historicoRolagens' | 'dataEncerramento' | 'precoEncerramento' | 'resultadoFinal' | 'historicoEventos'> & { dataAbertura: string }) => void;
-  rolarOperacao: (id: string, rolagem: Omit<Rolagem, 'premioLiquidoDaRolagem' | 'precoMedioNovoCalculado'>) => void;
-  encerrarOperacao: (id: string, precoEncerramento: number, dataEncerramento: string) => void;
+  rolarOperacao: (id: string, rolagem: Omit<Rolagem, 'premioLiquidoDaRolagem' | 'precoMedioNovoCalculado'> & { novoAtivo?: string }) => void;
+  encerrarOperacao: (id: string, precoEncerramento: number, dataEncerramento: string, dadosVinculo?: EncerramentoVinculoDivida) => void;
   aumentarPosicao: (id: string, quantidade: number, preco: number, data: string) => void;
+  dividirOperacao: (id: string, quantidadeSeparada: number) => void;
   editarOperacao: (id: string, campos: Partial<Operacao>) => void;
   excluirOperacao: (id: string) => void;
   editarEvento: (opId: string, eventId: string, novosCampos: Partial<EventoOperacao>) => void;
@@ -90,6 +97,7 @@ export function recalcularOperacao(op: Operacao): Operacao {
   const isVenda = op.direcaoInicial === 'V';
   
   // Base starting state
+  let ativo = op.ativo;
   let quantidadeAtual = op.quantidadeInicial;
   let strikeAtual = op.strikeInicial;
   let vencimentoAtual = op.vencimentoAtual;
@@ -115,6 +123,9 @@ export function recalcularOperacao(op: Operacao): Operacao {
       quantidadeAtual += qty;
       
     } else if (evt.tipo === 'rolagem') {
+      if (evt.novoAtivo && evt.novoAtivo.trim()) {
+        ativo = evt.novoAtivo.trim().toUpperCase();
+      }
       const qtyAnt = evt.quantidadeAnterior ?? quantidadeAtual;
       const qtyNovo = evt.quantidadeNova ?? qtyAnt;
       const precoRec = evt.precoRecompra ?? 0;
@@ -147,8 +158,19 @@ export function recalcularOperacao(op: Operacao): Operacao {
         precoVendaNova: precoVend,
         novoVencimento: novoVenc,
         premioLiquidoDaRolagem: premioRolagem,
-        precoMedioNovoCalculado
+        precoMedioNovoCalculado,
+        novoAtivo: evt.novoAtivo ? evt.novoAtivo.trim().toUpperCase() : undefined
       });
+    } else if (evt.tipo === 'divisao') {
+      const prop = evt.proporcao ?? (quantidadeAtual > 0 ? (evt.quantidade ?? 0) / quantidadeAtual : 0);
+      if (evt.ehNovaOperacao) {
+        quantidadeAtual = evt.quantidade ?? (quantidadeAtual * prop);
+        premioLiquidoAcumulado = premioLiquidoAcumulado * prop;
+      } else {
+        const qtdSub = evt.quantidade ?? (quantidadeAtual * prop);
+        quantidadeAtual = Math.max(0, quantidadeAtual - qtdSub);
+        premioLiquidoAcumulado = premioLiquidoAcumulado - (premioLiquidoAcumulado * prop);
+      }
     }
   });
 
@@ -166,6 +188,7 @@ export function recalcularOperacao(op: Operacao): Operacao {
 
   return {
     ...op,
+    ativo,
     quantidadeAtual,
     strikeAtual,
     vencimentoAtual,
@@ -274,15 +297,19 @@ export function OperationsProvider({ children }: { children: React.ReactNode }) 
     });
   };
 
-  const rolarOperacao = (id: string, rData: Omit<Rolagem, 'premioLiquidoDaRolagem' | 'precoMedioNovoCalculado'>) => {
+  const rolarOperacao = (id: string, rData: Omit<Rolagem, 'premioLiquidoDaRolagem' | 'precoMedioNovoCalculado'> & { novoAtivo?: string }) => {
     updateOperacoesWithUndo(prev => prev.map(op => {
       if (op.id !== id || op.status !== 'aberta') return op;
+
+      const novoAtivoLimpo = rData.novoAtivo?.trim().toUpperCase();
+      const mudouNome = !!(novoAtivoLimpo && novoAtivoLimpo !== op.ativo);
+      const detalheNome = mudouNome ? `Opção: ${op.ativo} → ${novoAtivoLimpo} | ` : '';
 
       const novoEvento: EventoOperacao = {
         id: uuidv4(),
         tipo: 'rolagem',
         data: rData.data,
-        detalhes: `Rolagem: Strike R$ ${rData.strikeAnterior.toFixed(2)} → R$ ${rData.strikeNovo.toFixed(2)}, Qtd ${rData.quantidadeAnterior} → ${rData.quantidadeNova}`,
+        detalhes: `Rolagem: ${detalheNome}Strike R$ ${rData.strikeAnterior.toFixed(2)} → R$ ${rData.strikeNovo.toFixed(2)}, Qtd ${rData.quantidadeAnterior} → ${rData.quantidadeNova}`,
         quantidadeAnterior: rData.quantidadeAnterior,
         quantidadeNova: rData.quantidadeNova,
         precoRecompra: rData.precoRecompra,
@@ -290,10 +317,13 @@ export function OperationsProvider({ children }: { children: React.ReactNode }) 
         strikeAnterior: rData.strikeAnterior,
         strikeNovo: rData.strikeNovo,
         novoVencimento: rData.novoVencimento,
+        novoAtivo: novoAtivoLimpo || op.ativo,
+        ativoAnterior: op.ativo
       };
 
       const opAtualizada = {
         ...op,
+        ativo: novoAtivoLimpo || op.ativo,
         historicoEventos: [...(op.historicoEventos || []), novoEvento]
       };
 
@@ -306,15 +336,24 @@ export function OperationsProvider({ children }: { children: React.ReactNode }) 
     });
   };
 
-  const encerrarOperacao = (id: string, precoEncerramento: number, dataEncerramento: string) => {
+  const encerrarOperacao = (
+    id: string, 
+    precoEncerramento: number, 
+    dataEncerramento: string,
+    dadosVinculo?: EncerramentoVinculoDivida
+  ) => {
     updateOperacoesWithUndo(prev => prev.map(op => {
       if (op.id !== id || op.status !== 'aberta') return op;
+
+      const detalhesEncerramento = dadosVinculo
+        ? `Encerramento de posição: Preço R$ ${precoEncerramento.toFixed(2)} (Vinculada à dívida: R$ ${Math.abs(dadosVinculo.valorVinculadoDivida).toFixed(2)})`
+        : `Encerramento de posição: Preço R$ ${precoEncerramento.toFixed(2)}`;
 
       const novoEvento: EventoOperacao = {
         id: uuidv4(),
         tipo: 'encerramento',
         data: dataEncerramento,
-        detalhes: `Encerramento de posição: Preço R$ ${precoEncerramento.toFixed(2)}`,
+        detalhes: detalhesEncerramento,
         preco: precoEncerramento,
       };
 
@@ -323,10 +362,20 @@ export function OperationsProvider({ children }: { children: React.ReactNode }) 
         status: 'encerrada' as const,
         precoEncerramento,
         dataEncerramento,
-        historicoEventos: [...(op.historicoEventos || []), novoEvento]
+        historicoEventos: [...(op.historicoEventos || []), novoEvento],
+        valorVinculadoDivida: dadosVinculo ? dadosVinculo.valorVinculadoDivida : null,
+        dividaVinculadaId: dadosVinculo ? dadosVinculo.dividaVinculadaId : null,
+        valorContadoComoResultadoOpcoes: dadosVinculo ? dadosVinculo.valorContadoComoResultadoOpcoes : null
       };
 
-      return recalcularOperacao(opComEvento);
+      const recalculada = recalcularOperacao(opComEvento);
+
+      // Se não houve vínculo explícito, valorContadoComoResultadoOpcoes é o resultadoFinal inteiro
+      if (!dadosVinculo) {
+        recalculada.valorContadoComoResultadoOpcoes = recalculada.resultadoFinal;
+      }
+
+      return recalculada;
     }));
 
     showToast("Operação encerrada com sucesso!", {
@@ -360,6 +409,88 @@ export function OperationsProvider({ children }: { children: React.ReactNode }) 
     }));
 
     showToast(quantidade >= 0 ? "Posição aumentada com sucesso!" : "Posição reduzida com sucesso!", {
+      label: "Desfazer",
+      onClick: desfazer
+    });
+  };
+
+  const dividirOperacao = (id: string, quantidadeSeparada: number) => {
+    const hoje = new Date().toISOString().split('T')[0];
+
+    updateOperacoesWithUndo(prev => {
+      const opOriginal = prev.find(op => op.id === id);
+      if (!opOriginal || opOriginal.status !== 'aberta') return prev;
+
+      if (quantidadeSeparada <= 0 || quantidadeSeparada >= opOriginal.quantidadeAtual) {
+        return prev;
+      }
+
+      const quantidadeAtualOriginal = opOriginal.quantidadeAtual;
+      const premioLiquidoAcumuladoOriginal = opOriginal.premioLiquidoAcumulado;
+      const proporcao = quantidadeSeparada / quantidadeAtualOriginal;
+      const porcentagem = (proporcao * 100).toFixed(1);
+
+      const quantidadeRestante = quantidadeAtualOriginal - quantidadeSeparada;
+      const premioRestante = premioLiquidoAcumuladoOriginal - (premioLiquidoAcumuladoOriginal * proporcao);
+      const premioNova = premioLiquidoAcumuladoOriginal * proporcao;
+
+      const eventoDivisaoOrigem: EventoOperacao = {
+        id: uuidv4(),
+        tipo: 'divisao',
+        data: hoje,
+        detalhes: `Dividida em duas operações. ${quantidadeRestante.toLocaleString('pt-BR')} contratos permaneceram nesta, ${quantidadeSeparada.toLocaleString('pt-BR')} contratos foram para uma nova operação.`,
+        quantidade: quantidadeSeparada,
+        proporcao,
+        ehNovaOperacao: false,
+        quantidadeOriginalAntes: quantidadeAtualOriginal
+      };
+
+      const eventoDivisaoDestino: EventoOperacao = {
+        id: uuidv4(),
+        tipo: 'divisao',
+        data: hoje,
+        detalhes: `Separada da operação original com ${quantidadeSeparada.toLocaleString('pt-BR')} contratos (${porcentagem}% da posição).`,
+        quantidade: quantidadeSeparada,
+        proporcao,
+        ehNovaOperacao: true,
+        quantidadeOriginalAntes: quantidadeAtualOriginal
+      };
+
+      // Operação original (a que permanece):
+      const opOriginalAtualizada: Operacao = {
+        ...opOriginal,
+        quantidadeAtual: quantidadeRestante,
+        premioLiquidoAcumulado: premioRestante,
+        precoMedioAtual: opOriginal.precoMedioAtual,
+        historicoEventos: [...(opOriginal.historicoEventos || []), eventoDivisaoOrigem]
+      };
+
+      // Nova operação (a que se separa):
+      const novaOperacaoId = uuidv4();
+      const novaOperacao: Operacao = {
+        ...opOriginal,
+        id: novaOperacaoId,
+        quantidadeAtual: quantidadeSeparada,
+        premioLiquidoAcumulado: premioNova,
+        precoMedioAtual: opOriginal.precoMedioAtual,
+        historicoRolagens: [...(opOriginal.historicoRolagens || [])],
+        status: 'aberta',
+        dataEncerramento: null,
+        precoEncerramento: null,
+        resultadoFinal: null,
+        historicoEventos: [...(opOriginal.historicoEventos || []), eventoDivisaoDestino]
+      };
+
+      const result = prev.map(op => (op.id === id ? opOriginalAtualizada : op));
+      const origIndex = prev.findIndex(op => op.id === id);
+      if (origIndex !== -1) {
+        result.splice(origIndex + 1, 0, novaOperacao);
+        return result;
+      }
+      return [...result, novaOperacao];
+    });
+
+    showToast("Operação dividida com sucesso!", {
       label: "Desfazer",
       onClick: desfazer
     });
@@ -465,7 +596,10 @@ export function OperationsProvider({ children }: { children: React.ReactNode }) 
           const qtyNov = mesclado.quantidadeNova ?? 0;
           const strAnt = mesclado.strikeAnterior ?? 0;
           const strNov = mesclado.strikeNovo ?? 0;
-          mesclado.detalhes = `Rolagem: Strike R$ ${strAnt.toFixed(2)} → R$ ${strNov.toFixed(2)}, Qtd ${qtyAnt} → ${qtyNov}`;
+          const detalheNome = mesclado.novoAtivo && mesclado.ativoAnterior && mesclado.novoAtivo !== mesclado.ativoAnterior
+            ? `Opção: ${mesclado.ativoAnterior} → ${mesclado.novoAtivo} | `
+            : (mesclado.novoAtivo ? `Opção: ${mesclado.novoAtivo} | ` : '');
+          mesclado.detalhes = `Rolagem: ${detalheNome}Strike R$ ${strAnt.toFixed(2)} → R$ ${strNov.toFixed(2)}, Qtd ${qtyAnt} → ${qtyNov}`;
         } else if (mesclado.tipo === 'abertura') {
           const qty = mesclado.quantidade || 0;
           const prc = mesclado.preco || 0;
@@ -548,6 +682,7 @@ export function OperationsProvider({ children }: { children: React.ReactNode }) 
       rolarOperacao, 
       encerrarOperacao, 
       aumentarPosicao,
+      dividirOperacao,
       editarOperacao,
       excluirOperacao,
       editarEvento,

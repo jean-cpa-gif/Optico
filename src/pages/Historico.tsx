@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useOperations } from '@/store/OperationsContext';
+import { useDividas } from '@/store/DividasContext';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import { ChevronDown, ChevronUp, Pencil, Trash2, Clock, X } from 'lucide-react';
-import { Operacao, EventoOperacao } from '@/types';
+import { ChevronDown, ChevronUp, Pencil, Trash2, Clock, X, Link2 } from 'lucide-react';
+import { Operacao, EventoOperacao, Divida } from '@/types';
 import { 
   ModalEditarOperacao, 
   ModalExcluirOperacao, 
@@ -11,6 +12,7 @@ import {
 
 export default function Historico() {
   const { operacoes, editarOperacao, excluirOperacao, editarEvento, excluirEvento } = useOperations();
+  const { dividas } = useDividas();
   const encerradas = operacoes.filter(op => op.status === 'encerrada');
   
   const [filtroAtivo, setFiltroAtivo] = useState('');
@@ -57,6 +59,7 @@ export default function Historico() {
                 <HistoricoRow 
                   key={op.id} 
                   op={op} 
+                  dividas={dividas}
                   isExpanded={expandedId === op.id}
                   onToggleExpand={() => setExpandedId(expandedId === op.id ? null : op.id)}
                   onEditar={() => setEditarModal({ op, open: true })}
@@ -118,6 +121,7 @@ export default function Historico() {
 interface HistoricoRowProps {
   key?: any;
   op: Operacao;
+  dividas: Divida[];
   isExpanded: boolean;
   onToggleExpand: () => void;
   onEditar: () => void;
@@ -128,6 +132,7 @@ interface HistoricoRowProps {
 
 function HistoricoRow({ 
   op, 
+  dividas,
   isExpanded, 
   onToggleExpand, 
   onEditar, 
@@ -135,10 +140,32 @@ function HistoricoRow({
   onEditEvent, 
   onDeleteEvent 
 }: HistoricoRowProps) {
+  const dividaVinculada = op.dividaVinculadaId ? dividas.find(d => d.id === op.dividaVinculadaId) : null;
+  const temVinculo = op.valorVinculadoDivida !== null && op.valorVinculadoDivida !== undefined && op.valorVinculadoDivida !== 0;
+  const valorVinculadoAbs = Math.abs(op.valorVinculadoDivida || 0);
+  const isAmortizacao = (op.valorVinculadoDivida || 0) > 0;
+
   return (
     <>
       <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
-        <td className="px-4 py-3 font-bold text-slate-700 dark:text-slate-200 underline decoration-slate-200 dark:decoration-slate-600 underline-offset-4">{op.ativo}</td>
+        <td className="px-4 py-3 font-bold text-slate-700 dark:text-slate-200">
+          <div className="flex flex-col gap-1 items-start">
+            <span className="underline decoration-slate-200 dark:decoration-slate-600 underline-offset-4">{op.ativo}</span>
+            {temVinculo && (
+              <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
+                isAmortizacao
+                  ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                  : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+              }`}>
+                {isAmortizacao ? (
+                  <>💰 {formatCurrency(valorVinculadoAbs)} amortizado em {dividaVinculada?.nome || 'dívida'}</>
+                ) : (
+                  <>📌 {formatCurrency(valorVinculadoAbs)} registrado como dívida em {dividaVinculada?.nome || 'dívida'}</>
+                )}
+              </span>
+            )}
+          </div>
+        </td>
         <td className="px-3 py-3">
           <div className="flex gap-1">
             <span className={`px-1.5 py-0.5 rounded-sm text-[9px] font-bold ${op.direcaoInicial === 'V' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'}`}>
@@ -151,8 +178,15 @@ function HistoricoRow({
         </td>
         <td className="px-3 py-3 text-[10px] text-slate-500 dark:text-slate-400">{formatDate(op.dataAbertura)}</td>
         <td className="px-3 py-3 text-[10px] text-slate-500 dark:text-slate-400">{formatDate(op.dataEncerramento!)}</td>
-        <td className={`px-3 py-3 text-right font-mono tracking-tighter font-medium ${op.resultadoFinal! >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-          {formatCurrency(op.resultadoFinal!)}
+        <td className="px-3 py-3 text-right">
+          <div className={`font-mono tracking-tighter font-medium ${op.resultadoFinal! >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+            {formatCurrency(op.resultadoFinal!)}
+          </div>
+          {temVinculo && op.valorContadoComoResultadoOpcoes !== null && op.valorContadoComoResultadoOpcoes !== undefined && (
+            <div className="text-[10px] text-slate-400 font-mono">
+              Opções: {formatCurrency(op.valorContadoComoResultadoOpcoes)}
+            </div>
+          )}
         </td>
         <td className="px-4 py-3 text-center">
           <div className="flex items-center justify-center gap-1">
@@ -193,6 +227,7 @@ function HistoricoRow({
                 {(op.historicoEventos || []).map((evt, idx) => {
                   let dotColor = "bg-blue-500";
                   if (evt.tipo === 'aumento') dotColor = "bg-amber-500";
+                  if (evt.tipo === 'divisao') dotColor = "bg-sky-500";
                   if (evt.tipo === 'rolagem') dotColor = "bg-violet-500";
                   if (evt.tipo === 'edicao') dotColor = "bg-slate-400";
                   if (evt.tipo === 'encerramento') dotColor = "bg-emerald-500";

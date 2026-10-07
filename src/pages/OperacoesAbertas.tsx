@@ -1,21 +1,26 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useOperations } from '@/store/OperationsContext';
+import { useDividas } from '@/store/DividasContext';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { differenceInDays } from 'date-fns';
-import { Operacao, EventoOperacao } from '@/types';
-import { X, ChevronDown, ChevronUp, Pencil, Trash2, Clock, Plus, AlertTriangle, SlidersHorizontal, Search } from 'lucide-react';
+import { Operacao, EventoOperacao, Divida } from '@/types';
+import { X, ChevronDown, ChevronUp, Pencil, Trash2, Clock, Plus, AlertTriangle, SlidersHorizontal, Search, Scissors, Link2 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import VencimentoAlerta from '@/components/VencimentoAlerta';
 import { 
   ModalAumentarPosicao, 
+  ModalDividirOperacao,
   ModalEditarOperacao, 
   ModalExcluirOperacao, 
   ModalEditarEvento 
 } from '@/components/Modals';
+import { ModalVincularDivida } from '@/components/ModalVincularDivida';
 
 export default function OperacoesAbertas() {
-  const { operacoes, rolarOperacao, encerrarOperacao, aumentarPosicao, editarOperacao, excluirOperacao, editarEvento, excluirEvento } = useOperations();
+  const { operacoes, rolarOperacao, encerrarOperacao, aumentarPosicao, dividirOperacao, editarOperacao, excluirOperacao, editarEvento, excluirEvento } = useOperations();
+  const { dividas, lancarAmortizacao, somarPrejuizoDivida, criarDividaDePrejuizo } = useDividas();
   const abertas = operacoes.filter(op => op.status === 'aberta');
+  const dividasAtivas = dividas.filter(d => d.status === 'aberta');
   const location = useLocation();
 
   const [direcao, setDirecao] = useState<'todas' | 'V' | 'C'>('todas');
@@ -38,8 +43,22 @@ export default function OperacoesAbertas() {
   });
 
   const [encerrarModal, setEncerrarModal] = useState<{ op: Operacao | null; open: boolean }>({ op: null, open: false });
+  const [vincularModal, setVincularModal] = useState<{
+    op: Operacao | null;
+    open: boolean;
+    dataEncerramento: string;
+    precoEncerramento: number;
+    resultadoProjetado: number;
+  }>({
+    op: null,
+    open: false,
+    dataEncerramento: '',
+    precoEncerramento: 0,
+    resultadoProjetado: 0
+  });
   const [rolarModal, setRolarModal] = useState<{ op: Operacao | null; open: boolean }>({ op: null, open: false });
   const [aumentarModal, setAumentarModal] = useState<{ op: Operacao | null; open: boolean }>({ op: null, open: false });
+  const [dividirModal, setDividirModal] = useState<{ op: Operacao | null; open: boolean }>({ op: null, open: false });
   const [editarModal, setEditarModal] = useState<{ op: Operacao | null; open: boolean }>({ op: null, open: false });
   const [excluirModal, setExcluirModal] = useState<{ op: Operacao | null; open: boolean }>({ op: null, open: false });
   const [editarEventoModal, setEditarEventoModal] = useState<{ op: Operacao | null; evento: EventoOperacao | null; open: boolean }>({ op: null, evento: null, open: false });
@@ -305,6 +324,7 @@ export default function OperacoesAbertas() {
             key={op.id} 
             op={op} 
             onEncerrar={() => setEncerrarModal({ op, open: true })}
+            onDividir={() => setDividirModal({ op, open: true })}
             onRolar={() => setRolarModal({ op, open: true })}
             onAumentar={() => setAumentarModal({ op, open: true })}
             onEditar={() => setEditarModal({ op, open: true })}
@@ -332,6 +352,110 @@ export default function OperacoesAbertas() {
           onConfirm={(preco, data) => {
             encerrarOperacao(encerrarModal.op!.id, preco, data);
             setEncerrarModal({ op: null, open: false });
+          }}
+          onVincularDivida={(preco, data, resProj) => {
+            const opAlvo = encerrarModal.op;
+            setEncerrarModal({ op: null, open: false });
+            setVincularModal({
+              op: opAlvo,
+              open: true,
+              dataEncerramento: data,
+              precoEncerramento: preco,
+              resultadoProjetado: resProj
+            });
+          }}
+        />
+      )}
+
+      {vincularModal.open && vincularModal.op && (
+        <ModalVincularDivida
+          isOpen={vincularModal.open}
+          op={vincularModal.op}
+          dataEncerramento={vincularModal.dataEncerramento}
+          precoEncerramento={vincularModal.precoEncerramento}
+          resultadoProjetado={vincularModal.resultadoProjetado}
+          dividasAtivas={dividasAtivas}
+          onClose={() => setVincularModal({ op: null, open: false, dataEncerramento: '', precoEncerramento: 0, resultadoProjetado: 0 })}
+          onConfirm={({ precoEncerramento, dataEncerramento, tipoVinculo, dividaId, valorVinculado, novaDivida }) => {
+            const opId = vincularModal.op!.id;
+            const resFinal = vincularModal.resultadoProjetado;
+
+            if (tipoVinculo === 'amortizar_existente' && dividaId) {
+              // Caso A: Lucro amortizando dívida existente
+              const valorVinculadoDivida = valorVinculado; // positivo
+              const sobra = resFinal - valorVinculado;
+
+              // 1. Atualiza dívida
+              lancarAmortizacao({
+                dividaId,
+                data: dataEncerramento,
+                valor: valorVinculado,
+                operacaoVinculadaId: opId,
+                observacao: `Amortização com lucro da operação ${vincularModal.op!.ativo}`
+              });
+
+              // 2. Encerra operação com campos de vínculo
+              encerrarOperacao(opId, precoEncerramento, dataEncerramento, {
+                valorVinculadoDivida,
+                dividaVinculadaId: dividaId,
+                valorContadoComoResultadoOpcoes: sobra
+              });
+            } else if (tipoVinculo === 'somar_existente' && dividaId) {
+              // Caso B1: Prejuízo somado a dívida existente
+              const valorVinculadoDivida = -valorVinculado; // negativo (representa prejuízo redirecionado)
+              // sobra no resultado de opções: resFinal (negativo) - (-valorVinculado)
+              const sobra = resFinal - (-valorVinculado);
+
+              // 1. Incrementa dívida existente
+              somarPrejuizoDivida({
+                dividaId,
+                data: dataEncerramento,
+                valor: valorVinculado,
+                operacaoId: opId,
+                observacao: `Prejuízo da operação ${vincularModal.op!.ativo}`
+              });
+
+              // 2. Encerra operação com campos de vínculo
+              encerrarOperacao(opId, precoEncerramento, dataEncerramento, {
+                valorVinculadoDivida,
+                dividaVinculadaId: dividaId,
+                valorContadoComoResultadoOpcoes: sobra
+              });
+            } else if (tipoVinculo === 'criar_nova' && novaDivida) {
+              // Caso B2: Prejuízo criando nova dívida
+              const valorVinculadoDivida = -valorVinculado; // negativo
+              const sobra = resFinal - (-valorVinculado);
+
+              // 1. Cria nova dívida
+              const novaDividaId = criarDividaDePrejuizo({
+                nome: novaDivida.nome,
+                saldoInicial: valorVinculado,
+                dataInicio: dataEncerramento,
+                taxaJurosMensalPercent: novaDivida.taxaJurosMensalPercent,
+                operacaoId: opId,
+                observacao: `Dívida criada a partir de operação ${vincularModal.op!.ativo} encerrada com prejuízo`
+              });
+
+              // 2. Encerra operação
+              encerrarOperacao(opId, precoEncerramento, dataEncerramento, {
+                valorVinculadoDivida,
+                dividaVinculadaId: novaDividaId,
+                valorContadoComoResultadoOpcoes: sobra
+              });
+            }
+
+            setVincularModal({ op: null, open: false, dataEncerramento: '', precoEncerramento: 0, resultadoProjetado: 0 });
+          }}
+        />
+      )}
+
+      {dividirModal.open && dividirModal.op && (
+        <ModalDividirOperacao 
+          op={dividirModal.op}
+          onClose={() => setDividirModal({ op: null, open: false })}
+          onConfirm={(quantidadeSeparada) => {
+            dividirOperacao(dividirModal.op!.id, quantidadeSeparada);
+            setDividirModal({ op: null, open: false });
           }}
         />
       )}
@@ -399,6 +523,7 @@ interface OperacaoCardProps {
   key?: any;
   op: Operacao;
   onEncerrar: () => void;
+  onDividir: () => void;
   onRolar: () => void;
   onAumentar: () => void;
   onEditar: () => void;
@@ -412,6 +537,7 @@ interface OperacaoCardProps {
 function OperacaoCard({ 
   op, 
   onEncerrar, 
+  onDividir,
   onRolar, 
   onAumentar, 
   onEditar, 
@@ -510,6 +636,7 @@ function OperacaoCard({
               {(op.historicoEventos || []).map((evt, idx) => {
                 let dotColor = "bg-blue-500";
                 if (evt.tipo === 'aumento') dotColor = "bg-amber-500";
+                if (evt.tipo === 'divisao') dotColor = "bg-sky-500";
                 if (evt.tipo === 'rolagem') dotColor = "bg-violet-500";
                 if (evt.tipo === 'edicao') dotColor = "bg-slate-400";
                 if (evt.tipo === 'encerramento') dotColor = "bg-emerald-500";
@@ -563,6 +690,14 @@ function OperacaoCard({
           Encerrar
         </button>
         <button 
+          onClick={onDividir}
+          className="py-1.5 px-3 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800/80 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/50 rounded-sm shadow-sm text-[10px] uppercase tracking-wider font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer"
+          title="Dividir operação em duas"
+        >
+          <Scissors className="w-3.5 h-3.5" />
+          Dividir
+        </button>
+        <button 
           onClick={onAumentar}
           className="py-1.5 px-3 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-sm shadow-sm text-[10px] uppercase tracking-wider font-extrabold transition-colors flex items-center justify-center gap-1 cursor-pointer"
           title="Aumentar posição"
@@ -582,7 +717,17 @@ function OperacaoCard({
 }
 
 // Keep local components ModalEncerrar and ModalRolar so we don't break existing page dependencies
-function ModalEncerrar({ op, onClose, onConfirm }: { op: Operacao, onClose: () => void, onConfirm: (p: number, d: string) => void }) {
+function ModalEncerrar({ 
+  op, 
+  onClose, 
+  onConfirm,
+  onVincularDivida 
+}: { 
+  op: Operacao; 
+  onClose: () => void; 
+  onConfirm: (p: number, d: string) => void;
+  onVincularDivida: (p: number, d: string, resProj: number) => void;
+}) {
   const [preco, setPreco] = useState('');
   const [data, setData] = useState(new Date().toISOString().split('T')[0]);
 
@@ -634,12 +779,25 @@ function ModalEncerrar({ op, onClose, onConfirm }: { op: Operacao, onClose: () =
           </div>
         </div>
 
-        <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex gap-2">
-          <button onClick={onClose} className="flex-1 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-sm">Cancelar</button>
+        <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-2">
+          <button onClick={onClose} className="px-3 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-sm cursor-pointer">
+            Cancelar
+          </button>
+          
+          <button
+            type="button"
+            onClick={() => p > 0 && onVincularDivida(p, data, resultadoProjetado)}
+            disabled={p <= 0}
+            className="flex-1 py-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-800/60 text-indigo-700 dark:text-indigo-300 disabled:opacity-50 font-semibold rounded-sm text-xs transition-colors shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <Link2 className="w-3.5 h-3.5" />
+            Vincular à Dívida
+          </button>
+
           <button 
             onClick={() => p > 0 && onConfirm(p, data)} 
             disabled={p <= 0}
-            className="flex-1 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-sm text-xs font-semibold transition-colors shadow-sm"
+            className="flex-1 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-sm text-xs font-semibold transition-colors shadow-sm cursor-pointer"
           >
             Confirmar Encerramento
           </button>
@@ -651,6 +809,7 @@ function ModalEncerrar({ op, onClose, onConfirm }: { op: Operacao, onClose: () =
 
 function ModalRolar({ op, onClose, onConfirm }: { op: Operacao, onClose: () => void, onConfirm: (d: any) => void }) {
   const [data, setData] = useState(new Date().toISOString().split('T')[0]);
+  const [novoAtivo, setNovoAtivo] = useState(op.ativo);
   const [precoRecompra, setPrecoRecompra] = useState('');
   const [precoVendaNova, setPrecoVendaNova] = useState('');
   const [quantidadeNova, setQuantidadeNova] = useState(op.quantidadeAtual.toString());
@@ -672,11 +831,17 @@ function ModalRolar({ op, onClose, onConfirm }: { op: Operacao, onClose: () => v
   const novoPremioAcumulado = op.premioLiquidoAcumulado + premioLiquidoDaRolagem;
   const novoPrecoMedio = qn > 0 ? Math.abs(novoPremioAcumulado) / qn : 0;
 
+  const nomeOpcaoFinal = novoAtivo.trim().toUpperCase() || op.ativo;
+  const mudouNome = nomeOpcaoFinal !== op.ativo;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
       <div className="bg-white dark:bg-slate-900 rounded-lg max-w-md w-full shadow-xl border border-slate-200 dark:border-slate-800 my-auto">
         <div className="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-800">
-          <h3 className="text-base font-bold">Rolar Operação</h3>
+          <div>
+            <h3 className="text-base font-bold">Rolar Operação</h3>
+            <p className="text-[11px] text-slate-400">Opção atual: <span className="font-semibold text-slate-700 dark:text-slate-300 font-mono">{op.ativo}</span></p>
+          </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
             <X className="w-5 h-5" />
           </button>
@@ -684,42 +849,60 @@ function ModalRolar({ op, onClose, onConfirm }: { op: Operacao, onClose: () => v
         
         <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">
           <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Data da Rolagem</label>
-              <input type="date" required value={data} onChange={(e) => setData(e.target.value)} className="w-full rounded-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <div>
+              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Data da Rolagem</label>
+              <input type="date" required value={data} onChange={(e) => setData(e.target.value)} className="w-full rounded-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Novo Nome da Opção (Ticker)</label>
+              <input 
+                type="text" 
+                required 
+                value={novoAtivo} 
+                onChange={(e) => setNovoAtivo(e.target.value.toUpperCase())} 
+                placeholder={`Ex: ${op.ativo}`}
+                className="w-full rounded-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm font-semibold uppercase focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" 
+              />
             </div>
             
             <div>
               <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">
                 {isVenda ? 'Preço Recompra (R$)' : 'Preço Venda (R$)'}
               </label>
-              <input type="number" step="0.01" min="0" required value={precoRecompra} onChange={(e) => setPrecoRecompra(e.target.value)} className="w-full rounded-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+              <input type="number" step="0.01" min="0" required value={precoRecompra} onChange={(e) => setPrecoRecompra(e.target.value)} placeholder="Ex: 0.85" className="w-full rounded-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
             </div>
             
             <div>
               <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">
                 {isVenda ? 'Preço Venda Nova (R$)' : 'Preço Compra Nova (R$)'}
               </label>
-              <input type="number" step="0.01" min="0" required value={precoVendaNova} onChange={(e) => setPrecoVendaNova(e.target.value)} className="w-full rounded-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+              <input type="number" step="0.01" min="0" required value={precoVendaNova} onChange={(e) => setPrecoVendaNova(e.target.value)} placeholder="Ex: 1.40" className="w-full rounded-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
             </div>
             
             <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-0.5">Nova Quantidade</label>
-              <input type="number" step="1" min="1" required value={quantidadeNova} onChange={(e) => setQuantidadeNova(e.target.value)} className="w-full rounded-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Nova Quantidade</label>
+              <input type="number" step="1" min="1" required value={quantidadeNova} onChange={(e) => setQuantidadeNova(e.target.value)} className="w-full rounded-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-0.5">Novo Strike (R$)</label>
-              <input type="number" step="0.01" min="0.01" required value={strikeNovo} onChange={(e) => setStrikeNovo(e.target.value)} className="w-full rounded-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Novo Strike (R$)</label>
+              <input type="number" step="0.01" min="0.01" required value={strikeNovo} onChange={(e) => setStrikeNovo(e.target.value)} className="w-full rounded-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
             </div>
 
             <div className="col-span-2">
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-0.5">Novo Vencimento</label>
-              <input type="date" required value={novoVencimento} onChange={(e) => setNovoVencimento(e.target.value)} className="w-full rounded-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Novo Vencimento</label>
+              <input type="date" required value={novoVencimento} onChange={(e) => setNovoVencimento(e.target.value)} className="w-full rounded-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
           </div>
 
           <div className="bg-slate-50 dark:bg-slate-800/40 p-3.5 rounded mt-4 border border-slate-200 dark:border-slate-700 space-y-1.5 text-xs">
+            {mudouNome && (
+              <div className="flex justify-between items-center pb-1.5 border-b border-slate-200 dark:border-slate-700">
+                <span className="text-slate-500 dark:text-slate-400">Novo Nome da Opção</span>
+                <span className="font-bold font-mono text-blue-600 dark:text-blue-400">{nomeOpcaoFinal}</span>
+              </div>
+            )}
             <div className="flex justify-between items-center">
               <span className="text-slate-500 dark:text-slate-400">Resultado desta Rolagem</span>
               <span className={`font-bold font-mono ${premioLiquidoDaRolagem >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}>
@@ -746,6 +929,7 @@ function ModalRolar({ op, onClose, onConfirm }: { op: Operacao, onClose: () => v
               if(pr>0 && pvn>0 && qn>0 && strikeNovo && novoVencimento) {
                 onConfirm({
                   data,
+                  novoAtivo: nomeOpcaoFinal,
                   strikeAnterior: op.strikeAtual,
                   strikeNovo: parseFloat(strikeNovo),
                   quantidadeAnterior: op.quantidadeAtual,

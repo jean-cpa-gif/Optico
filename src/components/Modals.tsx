@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, AlertTriangle } from 'lucide-react';
+import { X, AlertTriangle, Scissors } from 'lucide-react';
 import { Operacao, EventoOperacao } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 
@@ -170,6 +170,213 @@ export function ModalAumentarPosicao({ op, onClose, onConfirm }: ModalAumentarPo
             className="flex-1 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-bold rounded-sm text-xs transition-colors shadow-sm cursor-pointer text-center"
           >
             {effectiveTipo === 'reducao' ? 'Confirmar Redução' : 'Confirmar Aumento'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// MODAL: DIVIDIR OPERAÇÃO
+// ==========================================
+interface ModalDividirOperacaoProps {
+  op: Operacao;
+  onClose: () => void;
+  onConfirm: (quantidadeSeparada: number) => void;
+}
+
+export function ModalDividirOperacao({ op, onClose, onConfirm }: ModalDividirOperacaoProps) {
+  // Default to half the current quantity (rounded down to integer)
+  const defaultSep = Math.max(1, Math.floor(op.quantidadeAtual / 2));
+  const [quantidadeSeparadaStr, setQuantidadeSeparadaStr] = useState(defaultSep.toString());
+
+  const parsedSeparada = parseInt(quantidadeSeparadaStr, 10);
+  const quantidadeSeparada = isNaN(parsedSeparada) ? 0 : parsedSeparada;
+
+  const quantidadeTotal = op.quantidadeAtual;
+  const quantidadeRestante = quantidadeTotal - quantidadeSeparada;
+
+  const ehInvalidoMenorOuIgualZero = quantidadeSeparada <= 0;
+  const ehInvalidoMaiorOuIgualTotal = quantidadeSeparada >= quantidadeTotal;
+  const isInvalid = ehInvalidoMenorOuIgualZero || ehInvalidoMaiorOuIgualTotal;
+
+  const proporcao = quantidadeTotal > 0 && !isInvalid ? (quantidadeSeparada / quantidadeTotal) : 0;
+  const proporcaoRestante = 1 - proporcao;
+
+  const premioTotal = op.premioLiquidoAcumulado;
+  const premioRestante = premioTotal * proporcaoRestante;
+  const premioNova = premioTotal * proporcao;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-white dark:bg-slate-900 rounded-lg max-w-lg w-full shadow-xl border border-slate-200 dark:border-slate-800 animate-fade-in">
+        <div className="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 rounded-sm">
+              <Scissors className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
+                Dividir Operação
+              </h3>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                {op.ativo} ({op.quantidadeAtual} contratos • Breakeven: {formatCurrency(op.precoMedioAtual)})
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4">
+          <p className="text-xs leading-relaxed bg-sky-50/60 dark:bg-sky-950/20 border border-sky-200/60 dark:border-sky-900/30 p-3 rounded text-slate-700 dark:text-slate-300">
+            Isso vai dividir esta operação em duas, mantendo o breakeven proporcional em ambas. Você poderá rolar ou encerrar cada uma de forma independente depois.
+          </p>
+
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                Quantidade a separar em uma nova operação
+              </label>
+              <span className="text-[11px] font-mono text-slate-500">
+                Total disponível: <strong className="text-slate-700 dark:text-slate-300">{quantidadeTotal.toLocaleString('pt-BR')}</strong> un
+              </span>
+            </div>
+            <input 
+              type="number" 
+              step="1" 
+              min="1" 
+              max={quantidadeTotal - 1}
+              required 
+              value={quantidadeSeparadaStr} 
+              onChange={(e) => setQuantidadeSeparadaStr(e.target.value)}
+              className="w-full rounded-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sky-500"
+              placeholder="Ex: 1100"
+            />
+            {/* Quick buttons: 25%, 50%, 75% */}
+            <div className="flex gap-1.5 mt-2">
+              {[0.25, 0.5, 0.75].map(fraction => {
+                const qtd = Math.floor(quantidadeTotal * fraction);
+                if (qtd <= 0 || qtd >= quantidadeTotal) return null;
+                return (
+                  <button
+                    key={fraction}
+                    type="button"
+                    onClick={() => setQuantidadeSeparadaStr(qtd.toString())}
+                    className="px-2 py-0.5 text-[10px] font-semibold rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                  >
+                    {(fraction * 100)}% ({qtd.toLocaleString('pt-BR')})
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Validation warnings */}
+          {ehInvalidoMaiorOuIgualTotal && (
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/30 text-rose-700 dark:text-rose-400 rounded text-xs flex gap-2 items-start">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>
+                A quantidade a separar deve ser menor que a quantidade total ({quantidadeTotal.toLocaleString('pt-BR')} un), de forma que reste pelo menos 1 contrato na operação original.
+              </span>
+            </div>
+          )}
+
+          {ehInvalidoMenorOuIgualZero && (
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/30 text-rose-700 dark:text-rose-400 rounded text-xs flex gap-2 items-start">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>
+                Informe uma quantidade válida maior que 0.
+              </span>
+            </div>
+          )}
+
+          {/* Summary / Resulting state preview */}
+          {!isInvalid && (
+            <div className="space-y-3">
+              <div className="p-2.5 bg-slate-100 dark:bg-slate-800/60 rounded text-xs font-semibold text-slate-700 dark:text-slate-200 text-center">
+                Operação original ficará com <span className="text-sky-600 dark:text-sky-400 font-mono font-bold">{quantidadeRestante.toLocaleString('pt-BR')} un</span> — Nova operação ficará com <span className="text-sky-600 dark:text-sky-400 font-mono font-bold">{quantidadeSeparada.toLocaleString('pt-BR')} un</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Original remaining */}
+                <div className="p-3 rounded border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 space-y-2">
+                  <div className="flex items-center justify-between pb-1.5 border-b border-slate-200/60 dark:border-slate-700/60">
+                    <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                      Operação Original (Permanece)
+                    </span>
+                    <span className="text-[10px] font-bold font-mono px-1.5 py-0.5 bg-slate-200 dark:bg-slate-700 rounded text-slate-700 dark:text-slate-300">
+                      {(proporcaoRestante * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="space-y-1 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Quantidade:</span>
+                      <span className="font-bold font-mono text-slate-800 dark:text-slate-200">{quantidadeRestante.toLocaleString('pt-BR')} un</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Breakeven:</span>
+                      <span className="font-bold font-mono text-slate-800 dark:text-slate-200">{formatCurrency(op.precoMedioAtual)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Prêmio Proporcional:</span>
+                      <span className={`font-bold font-mono ${premioRestante >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                        {formatCurrency(premioRestante)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* New separated */}
+                <div className="p-3 rounded border border-sky-200 dark:border-sky-800/60 bg-sky-50/30 dark:bg-sky-950/20 space-y-2">
+                  <div className="flex items-center justify-between pb-1.5 border-b border-sky-200/60 dark:border-sky-800/60">
+                    <span className="text-[10px] font-bold text-sky-700 dark:text-sky-400 uppercase tracking-wider">
+                      Nova Operação (Separada)
+                    </span>
+                    <span className="text-[10px] font-bold font-mono px-1.5 py-0.5 bg-sky-200/60 dark:bg-sky-900/60 text-sky-800 dark:text-sky-300 rounded">
+                      {(proporcao * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="space-y-1 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Quantidade:</span>
+                      <span className="font-bold font-mono text-slate-800 dark:text-slate-200">{quantidadeSeparada.toLocaleString('pt-BR')} un</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Breakeven:</span>
+                      <span className="font-bold font-mono text-slate-800 dark:text-slate-200">{formatCurrency(op.precoMedioAtual)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Prêmio Proporcional:</span>
+                      <span className={`font-bold font-mono ${premioNova >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                        {formatCurrency(premioNova)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex gap-2">
+          <button 
+            type="button" 
+            onClick={onClose} 
+            className="flex-1 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-sm cursor-pointer"
+          >
+            Cancelar
+          </button>
+          <button 
+            type="button"
+            onClick={() => !isInvalid && onConfirm(quantidadeSeparada)} 
+            disabled={isInvalid}
+            className="flex-1 py-1.5 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-bold rounded-sm text-xs transition-colors shadow-sm cursor-pointer flex items-center justify-center gap-1.5"
+          >
+            <Scissors className="w-3.5 h-3.5" />
+            Confirmar Divisão
           </button>
         </div>
       </div>
@@ -414,6 +621,7 @@ export function ModalEditarEvento({ op, evento, onClose, onConfirm }: ModalEdita
   const [preco, setPreco] = useState(evento.preco?.toString() || '');
 
   // rolagem specific fields
+  const [novoAtivo, setNovoAtivo] = useState(evento.novoAtivo || '');
   const [strikeAnterior, setStrikeAnterior] = useState(evento.strikeAnterior?.toString() || '');
   const [strikeNovo, setStrikeNovo] = useState(evento.strikeNovo?.toString() || '');
   const [quantidadeAnterior, setQuantidadeAnterior] = useState(evento.quantidadeAnterior?.toString() || '');
@@ -435,6 +643,7 @@ export function ModalEditarEvento({ op, evento, onClose, onConfirm }: ModalEdita
       novosCampos.quantidade = parseInt(quantidade, 10) || 0;
       novosCampos.preco = parseFloat(preco) || 0;
     } else if (evento.tipo === 'rolagem') {
+      novosCampos.novoAtivo = novoAtivo ? novoAtivo.trim().toUpperCase() : undefined;
       novosCampos.strikeAnterior = parseFloat(strikeAnterior) || 0;
       novosCampos.strikeNovo = parseFloat(strikeNovo) || 0;
       novosCampos.quantidadeAnterior = parseInt(quantidadeAnterior, 10) || 0;
@@ -520,6 +729,14 @@ export function ModalEditarEvento({ op, evento, onClose, onConfirm }: ModalEdita
 
             {evento.tipo === 'rolagem' && (
               <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 dark:bg-slate-800/40 rounded border border-slate-200 dark:border-slate-700">
+                <div className="col-span-2">
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Novo Nome da Opção (Ticker)</label>
+                  <input 
+                    type="text" value={novoAtivo} onChange={(e) => setNovoAtivo(e.target.value.toUpperCase())}
+                    placeholder="Ex: PETRO305"
+                    className="w-full rounded-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1 text-sm font-semibold uppercase"
+                  />
+                </div>
                 <div>
                   <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Qtd Anterior</label>
                   <input 
