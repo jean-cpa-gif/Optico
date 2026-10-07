@@ -1,11 +1,15 @@
 import React, { useState, useRef } from 'react';
 import { useOperations } from '@/store/OperationsContext';
+import { useDividas } from '@/store/DividasContext';
 import { useAuth } from '@/store/AuthContext';
 import { Download, Upload, AlertTriangle, Trash2, Cloud, CloudUpload, CloudDownload, Clock, Loader2, LogIn, CheckCircle2 } from 'lucide-react';
 import CloudConfirmModal from '@/components/CloudConfirmModal';
+import { ModalConfirmarExclusao } from '@/components/ModalConfirmarExclusao';
+import { Operacao, Divida, BackupCompletoData } from '@/types';
 
 export default function ImportExport() {
   const { operacoes, importarDados, limparDados, showToast } = useOperations();
+  const { dividas, importarDividas } = useDividas();
   const { user, cloudBackupInfo, fazerBackupNuvem, baixarDadosNuvem } = useAuth();
   const [importStatus, setImportStatus] = useState<{ message: string; type: 'success' | 'error' | null }>({ message: '', type: null });
   const [cloudLoading, setCloudLoading] = useState(false);
@@ -13,6 +17,8 @@ export default function ImportExport() {
     isOpen: boolean;
     type: 'upload' | 'download';
   } | null>(null);
+  const [modalConfirmLimpar, setModalConfirmLimpar] = useState(false);
+  const [modalConfirmSubstituir, setModalConfirmSubstituir] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const formatLastBackup = (isoDate: string | null | undefined) => {
@@ -51,8 +57,11 @@ export default function ImportExport() {
     if (!user) return;
     try {
       setCloudLoading(true);
-      const res = await fazerBackupNuvem(operacoes);
-      setImportStatus({ message: `Backup de ${res.count} operações salvo com sucesso na nuvem!`, type: 'success' });
+      const res = await fazerBackupNuvem(operacoes, dividas);
+      setImportStatus({ 
+        message: `Backup de ${res.count} operações e ${dividas.length} dívidas salvo com sucesso na nuvem!`, 
+        type: 'success' 
+      });
       showToast('Backup na nuvem realizado com sucesso!');
       setConfirmModal(null);
     } catch (err: any) {
@@ -73,7 +82,14 @@ export default function ImportExport() {
         return;
       }
       importarDados(res.dados, true);
-      setImportStatus({ message: `Sucesso: ${res.dados.length} operações restauradas da nuvem!`, type: 'success' });
+      if (res.dividas && res.dividas.length > 0) {
+        importarDividas(res.dividas, true);
+      }
+      const msgDividas = res.dividas && res.dividas.length > 0 ? ` e ${res.dividas.length} dívidas` : '';
+      setImportStatus({ 
+        message: `Sucesso: ${res.dados.length} operações${msgDividas} restauradas da nuvem!`, 
+        type: 'success' 
+      });
       showToast('Dados da nuvem restaurados com sucesso!');
       setConfirmModal(null);
     } catch (err: any) {
@@ -84,10 +100,16 @@ export default function ImportExport() {
   };
 
   const handleExport = () => {
-    const dataStr = JSON.stringify(operacoes, null, 2);
+    const backup: BackupCompletoData = {
+      versao: 2,
+      dataExportacao: new Date().toISOString(),
+      operacoes,
+      dividas
+    };
+    const dataStr = JSON.stringify(backup, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
     
-    const exportFileDefaultName = `opcoes-control-export-${new Date().toISOString().split('T')[0]}.json`;
+    const exportFileDefaultName = `opcoes-control-backup-${new Date().toISOString().split('T')[0]}.json`;
     
     const linkElement = document.createElement('a');
     linkElement.setAttribute('href', dataUri);
@@ -102,13 +124,66 @@ export default function ImportExport() {
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const json = JSON.parse(event.target?.result as string);
-        if (!Array.isArray(json)) {
-          throw new Error('Formato inválido. O arquivo deve conter uma lista de operações.');
+        const text = event.target?.result as string;
+        let json: any;
+        try {
+          json = JSON.parse(text);
+        } catch {
+          throw new Error('Arquivo JSON corrompido ou formato inválido.');
         }
-        
-        importarDados(json, substituir);
-        setImportStatus({ message: `Dados importados com sucesso (${json.length} operações).`, type: 'success' });
+
+        let operacoesImportar: Operacao[] = [];
+        let dividasImportar: Divida[] | undefined = undefined;
+
+        if (Array.isArray(json)) {
+          // Formato legado (apenas lista de operações)
+          operacoesImportar = json;
+        } else if (typeof json === 'object' && json !== null) {
+          if (!Array.isArray(json.operacoes)) {
+            throw new Error('Formato inválido. O arquivo de backup deve conter o campo "operacoes".');
+          }
+          operacoesImportar = json.operacoes;
+          if (json.dividas !== undefined) {
+            if (!Array.isArray(json.dividas)) {
+              throw new Error('Formato inválido. O campo "dividas" deve ser uma lista.');
+            }
+            dividasImportar = json.dividas;
+          }
+        } else {
+          throw new Error('Formato de backup não reconhecido.');
+        }
+
+        // Validação básica das operações
+        for (const op of operacoesImportar) {
+          if (!op.id || !op.ativo) {
+            throw new Error('Uma ou mais operações no arquivo possuem estrutura inválida (sem id ou ticker).');
+          }
+        }
+
+        // Validação básica das dívidas se fornecidas
+        if (dividasImportar) {
+          for (const d of dividasImportar) {
+            if (!d.id || !d.nome || d.saldoInicial === undefined) {
+              throw new Error('Uma ou mais dívidas no arquivo possuem estrutura inválida.');
+            }
+          }
+        }
+
+        // Importa operações
+        importarDados(operacoesImportar, substituir);
+
+        // Se o arquivo possui dívidas, importa dívidas.
+        // Se for backup antigo de operações, aceita sem apagar dívidas existentes!
+        if (dividasImportar !== undefined) {
+          importarDividas(dividasImportar, substituir);
+        }
+
+        const msgDividas = dividasImportar ? ` e ${dividasImportar.length} dívidas` : '';
+        setImportStatus({ 
+          message: `Dados importados com sucesso (${operacoesImportar.length} operações${msgDividas}).`, 
+          type: 'success' 
+        });
+        showToast('Backup importado com sucesso!');
       } catch (err: any) {
         setImportStatus({ message: `Erro ao importar: ${err.message}`, type: 'error' });
       }
@@ -121,14 +196,8 @@ export default function ImportExport() {
   };
 
   const handleClear = () => {
-    const confirm1 = window.confirm("ATENÇÃO: Você está prestes a apagar TODAS as operações cadastradas. Deseja continuar?");
-    if (confirm1) {
-      const confirm2 = window.confirm("TEM CERTEZA ABSOLUTA? Esta ação é irreversível.");
-      if (confirm2) {
-        limparDados();
-        setImportStatus({ message: "Todos os dados foram apagados com sucesso.", type: 'success' });
-      }
-    }
+    limparDados();
+    setImportStatus({ message: "Todos os dados foram apagados com sucesso.", type: 'success' });
   };
 
   return (
@@ -238,14 +307,7 @@ export default function ImportExport() {
               Mesclar
             </button>
             <button 
-              onClick={() => {
-                if(window.confirm('Isso vai apagar todos os dados atuais e carregar apenas os do arquivo. Tem certeza?')) {
-                  if(fileInputRef.current) {
-                    fileInputRef.current.onchange = (e) => handleImport(e as any, true);
-                    fileInputRef.current.click();
-                  }
-                }
-              }}
+              onClick={() => setModalConfirmSubstituir(true)}
               className="flex-1 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 dark:hover:bg-rose-900/20 dark:hover:text-rose-400 py-2 rounded-sm text-[9px] uppercase tracking-wider font-bold transition-colors shadow-sm cursor-pointer"
             >
               Substituir
@@ -264,7 +326,7 @@ export default function ImportExport() {
             A ação abaixo apagará permanentemente todos os dados do aplicativo armazenados neste navegador.
           </p>
           <button 
-            onClick={handleClear}
+            onClick={() => setModalConfirmLimpar(true)}
             className="flex items-center justify-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white px-3 py-2 rounded-sm text-[9px] uppercase tracking-wider font-bold transition-colors shadow-sm cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" />
@@ -287,6 +349,31 @@ export default function ImportExport() {
           userEmail={user?.email}
         />
       )}
+
+      {/* Modal de confirmação para limpar dados */}
+      <ModalConfirmarExclusao
+        isOpen={modalConfirmLimpar}
+        titulo="Apagar Todos os Dados"
+        descricao="ATENÇÃO: Você está prestes a apagar TODAS as operações cadastradas localmente neste navegador. Esta ação é definitiva."
+        textoBotaoConfirmar="Sim, Apagar Tudo"
+        onClose={() => setModalConfirmLimpar(false)}
+        onConfirm={handleClear}
+      />
+
+      {/* Modal de confirmação para substituir dados por arquivo */}
+      <ModalConfirmarExclusao
+        isOpen={modalConfirmSubstituir}
+        titulo="Substituir Dados Locais"
+        descricao="Isso vai apagar todos os dados atuais e carregar apenas os dados contidos no arquivo JSON selecionado. Deseja prosseguir?"
+        textoBotaoConfirmar="Prosseguir com Substituição"
+        onClose={() => setModalConfirmSubstituir(false)}
+        onConfirm={() => {
+          if (fileInputRef.current) {
+            fileInputRef.current.onchange = (e) => handleImport(e as any, true);
+            fileInputRef.current.click();
+          }
+        }}
+      />
     </div>
   );
 }

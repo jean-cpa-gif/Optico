@@ -26,7 +26,9 @@ export default function Dividas() {
     lancarJuro, 
     lancarAmortizacao, 
     alterarStatusDivida, 
+    editarDivida,
     excluirDivida, 
+    editarLancamentoHistorico,
     excluirLancamentoHistorico 
   } = useDividas();
 
@@ -198,7 +200,9 @@ export default function Dividas() {
                 onLancarJuro={(d) => setModalJuroDivida(d)}
                 onLancarAmortizacao={(d) => setModalAmortDivida(d)}
                 onMarcarQuitada={(id, quitada) => alterarStatusDivida(id, quitada ? 'quitada' : 'aberta')}
+                onEditarDivida={editarDivida}
                 onExcluirDivida={excluirDivida}
+                onEditarItemHistorico={editarLancamentoHistorico}
                 onExcluirItemHistorico={excluirLancamentoHistorico}
               />
             ))}
@@ -225,7 +229,9 @@ export default function Dividas() {
                 onLancarJuro={(d) => setModalJuroDivida(d)}
                 onLancarAmortizacao={(d) => setModalAmortDivida(d)}
                 onMarcarQuitada={(id, quitada) => alterarStatusDivida(id, quitada ? 'quitada' : 'aberta')}
+                onEditarDivida={editarDivida}
                 onExcluirDivida={excluirDivida}
+                onEditarItemHistorico={editarLancamentoHistorico}
                 onExcluirItemHistorico={excluirLancamentoHistorico}
               />
             ))}

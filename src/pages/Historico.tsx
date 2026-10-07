@@ -2,42 +2,118 @@ import { useState } from 'react';
 import { useOperations } from '@/store/OperationsContext';
 import { useDividas } from '@/store/DividasContext';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import { ChevronDown, ChevronUp, Pencil, Trash2, Clock, X, Link2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Pencil, Trash2, Clock, X, Link2, Layers } from 'lucide-react';
 import { Operacao, EventoOperacao, Divida } from '@/types';
 import { 
   ModalEditarOperacao, 
   ModalExcluirOperacao, 
   ModalEditarEvento 
 } from '@/components/Modals';
+import { ModalAjustarVinculoAoEditar } from '@/components/ModalAjustarVinculoAoEditar';
+import { ModalAgruparEstrategia } from '@/components/ModalAgruparEstrategia';
+import { ResumoConjuntoEstrategia } from '@/components/ResumoConjuntoEstrategia';
 
 export default function Historico() {
-  const { operacoes, editarOperacao, excluirOperacao, editarEvento, excluirEvento } = useOperations();
-  const { dividas } = useDividas();
+  const { operacoes, editarOperacao, excluirOperacao, editarEvento, excluirEvento, atribuirGrupoEstrategia } = useOperations();
+  const { dividas, ajustarVinculoOperacao } = useDividas();
   const encerradas = operacoes.filter(op => op.status === 'encerrada');
   
   const [filtroAtivo, setFiltroAtivo] = useState('');
+  const [filtroEstrategia, setFiltroEstrategia] = useState('todas');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const [editarModal, setEditarModal] = useState<{ op: Operacao | null; open: boolean }>({ op: null, open: false });
   const [excluirModal, setExcluirModal] = useState<{ op: Operacao | null; open: boolean }>({ op: null, open: false });
   const [editarEventoModal, setEditarEventoModal] = useState<{ op: Operacao | null; evento: EventoOperacao | null; open: boolean }>({ op: null, evento: null, open: false });
+  const [agruparModal, setAgruparModal] = useState<{ op: Operacao | null; open: boolean }>({ op: null, open: false });
 
-  const filtered = encerradas.filter(op => 
-    filtroAtivo === '' || op.ativo.includes(filtroAtivo.toUpperCase())
-  ).sort((a, b) => new Date(b.dataEncerramento!).getTime() - new Date(a.dataEncerramento!).getTime());
+  // Modal para ajuste de vínculo de dívida ao editar operação encerrada
+  const [ajustarVinculoModal, setAjustarVinculoModal] = useState<{
+    open: boolean;
+    op: Operacao | null;
+    campos: Partial<Operacao>;
+    dividaNome: string;
+    resultadoAnterior: number;
+    novoResultado: number;
+    valorVinculadoAtual: number;
+  }>({
+    open: false,
+    op: null,
+    campos: {},
+    dividaNome: '',
+    resultadoAnterior: 0,
+    novoResultado: 0,
+    valorVinculadoAtual: 0
+  });
+
+  const gruposCadastrados = Array.from(new Set(operacoes.map(op => op.grupoEstrategia).filter(Boolean) as string[])).sort();
+  const isEstrategiaEspecifica = filtroEstrategia !== 'todas' && filtroEstrategia !== 'sem_grupo';
+  const pernasDaEstrategia = isEstrategiaEspecifica 
+    ? operacoes.filter(op => op.grupoEstrategia === filtroEstrategia)
+    : [];
+  const pernasAbertasDaEstrategia = pernasDaEstrategia.filter(op => op.status === 'aberta');
+
+  const filtered = encerradas.filter(op => {
+    const matchAtivo = filtroAtivo === '' || op.ativo.includes(filtroAtivo.toUpperCase());
+    const matchEstrategia = 
+      filtroEstrategia === 'todas'
+        ? true
+        : filtroEstrategia === 'sem_grupo'
+          ? !op.grupoEstrategia
+          : op.grupoEstrategia === filtroEstrategia;
+    return matchAtivo && matchEstrategia;
+  }).sort((a, b) => new Date(b.dataEncerramento!).getTime() - new Date(a.dataEncerramento!).getTime());
 
   return (
     <div className="space-y-6">
+      {/* Resumo Conjunto da Estratégia (se filtrado por grupo específico) */}
+      {isEstrategiaEspecifica && (
+        <ResumoConjuntoEstrategia
+          nomeEstrategia={filtroEstrategia}
+          pernas={pernasDaEstrategia}
+          onLimparFiltro={() => setFiltroEstrategia('todas')}
+        />
+      )}
+
       <div className="flex justify-between items-center flex-wrap gap-4">
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Filtrar Ativo:</label>
-          <input 
-            type="text" 
-            placeholder="Ex: BOVA11" 
-            value={filtroAtivo}
-            onChange={(e) => setFiltroAtivo(e.target.value)}
-            className="w-32 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Filtrar Ativo:</label>
+            <input 
+              type="text" 
+              placeholder="Ex: BOVA11" 
+              value={filtroAtivo}
+              onChange={(e) => setFiltroAtivo(e.target.value)}
+              className="w-32 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Estratégia:</label>
+            <select
+              value={filtroEstrategia}
+              onChange={(e) => setFiltroEstrategia(e.target.value)}
+              className="rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium cursor-pointer"
+            >
+              <option value="todas">Todas as estratégias</option>
+              <option value="sem_grupo">Sem grupo</option>
+              {gruposCadastrados.map(g => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+          </div>
+
+          {(filtroAtivo !== '' || filtroEstrategia !== 'todas') && (
+            <button
+              onClick={() => {
+                setFiltroAtivo('');
+                setFiltroEstrategia('todas');
+              }}
+              className="text-xs font-medium text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+            >
+              Limpar filtros
+            </button>
+          )}
         </div>
       </div>
 
@@ -64,6 +140,8 @@ export default function Historico() {
                   onToggleExpand={() => setExpandedId(expandedId === op.id ? null : op.id)}
                   onEditar={() => setEditarModal({ op, open: true })}
                   onExcluir={() => setExcluirModal({ op, open: true })}
+                  onAgrupar={() => setAgruparModal({ op, open: true })}
+                  onFiltrarEstrategia={(grupo) => setFiltroEstrategia(grupo)}
                   onEditEvent={(evt) => setEditarEventoModal({ op, evento: evt, open: true })}
                   onDeleteEvent={(evtId) => excluirEvento(op.id, evtId)}
                 />
@@ -71,7 +149,7 @@ export default function Historico() {
               {filtered.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-4 py-6 text-center text-slate-500">
-                    Nenhuma operação encontrada
+                    Nenhuma operação encerrada encontrada
                   </td>
                 </tr>
               )}
@@ -80,14 +158,146 @@ export default function Historico() {
         </div>
       </div>
 
+      {/* Se estiver filtrando uma estratégia específica e houver pernas abertas nela, exibi-las aqui para visão completa de todas as pernas */}
+      {isEstrategiaEspecifica && pernasAbertasDaEstrategia.length > 0 && (
+        <div className="bg-white dark:bg-slate-800 rounded-md card-shadow border border-slate-200 dark:border-slate-700 p-4 space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                Pernas Abertas desta Estratégia ({pernasAbertasDaEstrategia.length})
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                  Em Andamento
+                </span>
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Pernas ainda ativas da estratégia "{filtroEstrategia}".
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            {pernasAbertasDaEstrategia.map(op => (
+              <div key={op.id} className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40">
+                <div className="flex justify-between items-start">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-sm text-slate-800 dark:text-slate-100">{op.ativo}</span>
+                    <span className={`px-1 py-0.2 rounded text-[9px] font-bold ${op.direcaoInicial === 'V' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400'}`}>
+                      {op.direcaoInicial === 'V' ? 'V' : 'C'} {op.tipoOpcao}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setAgruparModal({ op, open: true })}
+                    title="Gerenciar estratégia"
+                    className="text-slate-400 hover:text-indigo-600 p-0.5"
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  {op.quantidadeAtual} contratos • Strike {formatCurrency(op.strikeAtual)}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Vencimento: {formatDate(op.vencimentoAtual)}
+                </p>
+                <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center text-xs">
+                  <span className="text-slate-400">Saldo de Prêmio:</span>
+                  <span className={`font-mono font-bold ${op.premioLiquidoAcumulado >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                    {formatCurrency(op.premioLiquidoAcumulado)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* MODALS */}
       {editarModal.open && editarModal.op && (
         <ModalEditarOperacao 
           op={editarModal.op}
+          gruposExistentes={gruposCadastrados}
           onClose={() => setEditarModal({ op: null, open: false })}
           onConfirm={(campos) => {
+            const op = editarModal.op!;
+            if (op.dividaVinculadaId && op.valorVinculadoDivida) {
+              const dividaAlvo = dividas.find(d => d.id === op.dividaVinculadaId);
+              const isVenda = (campos.direcaoInicial ?? op.direcaoInicial) === 'V';
+              const precoEnc = campos.precoEncerramento !== undefined ? (campos.precoEncerramento ?? 0) : (op.precoEncerramento ?? 0);
+              const qtd = campos.quantidadeInicial !== undefined ? campos.quantidadeInicial : op.quantidadeAtual;
+              
+              let premioLiq = op.premioLiquidoAcumulado;
+              if (campos.quantidadeInicial !== undefined && campos.precoMedioOriginal !== undefined) {
+                premioLiq = isVenda ? (campos.quantidadeInicial * campos.precoMedioOriginal) : -(campos.quantidadeInicial * campos.precoMedioOriginal);
+              }
+              const novoResFinal = isVenda ? (premioLiq - qtd * precoEnc) : (premioLiq + qtd * precoEnc);
+              const valorVinc = op.valorVinculadoDivida;
+              const isLucroVinculado = valorVinc > 0;
+              const isLucroNovo = novoResFinal > 0;
+              const isPrejuizoNovo = novoResFinal < 0;
+
+              const invalido = isLucroVinculado 
+                ? (!isLucroNovo || novoResFinal < valorVinc)
+                : (!isPrejuizoNovo || Math.abs(novoResFinal) < Math.abs(valorVinc));
+
+              if (invalido && dividaAlvo) {
+                setAjustarVinculoModal({
+                  open: true,
+                  op,
+                  campos,
+                  dividaNome: dividaAlvo.nome,
+                  resultadoAnterior: op.resultadoFinal ?? 0,
+                  novoResultado: novoResFinal,
+                  valorVinculadoAtual: valorVinc
+                });
+                setEditarModal({ op: null, open: false });
+                return;
+              }
+            }
+
             editarOperacao(editarModal.op!.id, campos);
             setEditarModal({ op: null, open: false });
+          }}
+        />
+      )}
+
+      {/* Modal de Ajuste de Vínculo com Dívida */}
+      {ajustarVinculoModal.open && ajustarVinculoModal.op && (
+        <ModalAjustarVinculoAoEditar
+          isOpen={ajustarVinculoModal.open}
+          ativo={ajustarVinculoModal.op.ativo}
+          dividaNome={ajustarVinculoModal.dividaNome}
+          resultadoAnterior={ajustarVinculoModal.resultadoAnterior}
+          novoResultado={ajustarVinculoModal.novoResultado}
+          valorVinculadoAtual={ajustarVinculoModal.valorVinculadoAtual}
+          onClose={() => setAjustarVinculoModal({ open: false, op: null, campos: {}, dividaNome: '', resultadoAnterior: 0, novoResultado: 0, valorVinculadoAtual: 0 })}
+          onConfirmAjuste={(acao, novoValor) => {
+            const op = ajustarVinculoModal.op!;
+            const campos = { ...ajustarVinculoModal.campos };
+
+            if (acao === 'desvincular') {
+              ajustarVinculoOperacao({
+                operacaoId: op.id,
+                dividaId: op.dividaVinculadaId!,
+                acao: 'desvincular'
+              });
+              campos.dividaVinculadaId = null;
+              campos.valorVinculadoDivida = null;
+              campos.valorContadoComoResultadoOpcoes = ajustarVinculoModal.novoResultado;
+            } else if (acao === 'ajustar_valor' && novoValor !== undefined) {
+              ajustarVinculoOperacao({
+                operacaoId: op.id,
+                dividaId: op.dividaVinculadaId!,
+                acao: 'ajustar_valor',
+                novoValorVinculado: novoValor
+              });
+              const isLucro = ajustarVinculoModal.novoResultado >= 0;
+              const novoValorComSinal = isLucro ? novoValor : -novoValor;
+              campos.valorVinculadoDivida = novoValorComSinal;
+              campos.valorContadoComoResultadoOpcoes = ajustarVinculoModal.novoResultado - novoValorComSinal;
+            }
+
+            editarOperacao(op.id, campos);
+            setAjustarVinculoModal({ open: false, op: null, campos: {}, dividaNome: '', resultadoAnterior: 0, novoResultado: 0, valorVinculadoAtual: 0 });
           }}
         />
       )}
@@ -114,6 +324,20 @@ export default function Historico() {
           }}
         />
       )}
+
+      {agruparModal.open && agruparModal.op && (
+        <ModalAgruparEstrategia
+          isOpen={agruparModal.open}
+          op={agruparModal.op}
+          todasOperacoes={operacoes}
+          gruposExistentes={gruposCadastrados}
+          onClose={() => setAgruparModal({ op: null, open: false })}
+          onSalvar={(opIds, grupo) => {
+            atribuirGrupoEstrategia(opIds, grupo);
+            setAgruparModal({ op: null, open: false });
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -126,6 +350,8 @@ interface HistoricoRowProps {
   onToggleExpand: () => void;
   onEditar: () => void;
   onExcluir: () => void;
+  onAgrupar: () => void;
+  onFiltrarEstrategia?: (grupo: string) => void;
   onEditEvent: (evt: EventoOperacao) => void;
   onDeleteEvent: (evtId: string) => void;
 }
@@ -137,6 +363,8 @@ function HistoricoRow({
   onToggleExpand, 
   onEditar, 
   onExcluir, 
+  onAgrupar,
+  onFiltrarEstrategia,
   onEditEvent, 
   onDeleteEvent 
 }: HistoricoRowProps) {
@@ -151,6 +379,20 @@ function HistoricoRow({
         <td className="px-4 py-3 font-bold text-slate-700 dark:text-slate-200">
           <div className="flex flex-col gap-1 items-start">
             <span className="underline decoration-slate-200 dark:decoration-slate-600 underline-offset-4">{op.ativo}</span>
+            {op.grupoEstrategia && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onFiltrarEstrategia?.(op.grupoEstrategia!);
+                }}
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:text-indigo-300 dark:hover:bg-indigo-900/60 border border-indigo-200/80 dark:border-indigo-800/80 transition-colors cursor-pointer"
+                title={`Filtrar por esta estratégia: ${op.grupoEstrategia}`}
+              >
+                <Layers className="w-2.5 h-2.5 text-indigo-500" />
+                <span>{op.grupoEstrategia}</span>
+              </button>
+            )}
             {temVinculo && (
               <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
                 isAmortizacao
@@ -190,6 +432,13 @@ function HistoricoRow({
         </td>
         <td className="px-4 py-3 text-center">
           <div className="flex items-center justify-center gap-1">
+            <button 
+              onClick={onAgrupar}
+              title={op.grupoEstrategia ? `Gerenciar estratégia (${op.grupoEstrategia})` : "Agrupar em estratégia"}
+              className="p-1 rounded text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+            >
+              <Layers className="w-3.5 h-3.5" />
+            </button>
             <button 
               onClick={onEditar}
               title="Editar operação"

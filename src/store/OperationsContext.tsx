@@ -19,10 +19,14 @@ interface OperationsContextType {
   excluirOperacao: (id: string) => void;
   editarEvento: (opId: string, eventId: string, novosCampos: Partial<EventoOperacao>) => void;
   excluirEvento: (opId: string, eventId: string) => void;
+  atribuirGrupoEstrategia: (opIds: string | string[], grupo: string | null) => void;
   importarDados: (dados: Operacao[], substituir: boolean) => void;
   limparDados: () => void;
   desfazer: () => void;
   podeDesfazer: boolean;
+  restaurarOperacoesSnapshot: (snapshot: Operacao[]) => void;
+  undoIntegradoFn: (() => void) | null;
+  setUndoIntegradoFn: (fn: (() => void) | null) => void;
   toast: {
     id: string;
     mensagem: string;
@@ -177,6 +181,8 @@ export function recalcularOperacao(op: Operacao): Operacao {
   const precoMedioAtual = quantidadeAtual > 0 ? Math.abs(premioLiquidoAcumulado) / quantidadeAtual : 0;
   
   let resultadoFinal = op.resultadoFinal;
+  let valorContadoComoResultadoOpcoes = op.valorContadoComoResultadoOpcoes ?? null;
+
   if (op.status === 'encerrada') {
     const precoEncerramento = op.precoEncerramento ?? 0;
     if (isVenda) {
@@ -184,6 +190,14 @@ export function recalcularOperacao(op: Operacao): Operacao {
     } else {
       resultadoFinal = premioLiquidoAcumulado + (quantidadeAtual * precoEncerramento);
     }
+
+    // Recalcula também valorContadoComoResultadoOpcoes = resultadoFinal - (valorVinculadoDivida ?? 0)
+    if (resultadoFinal !== null) {
+      valorContadoComoResultadoOpcoes = resultadoFinal - (op.valorVinculadoDivida ?? 0);
+    }
+  } else {
+    resultadoFinal = null;
+    valorContadoComoResultadoOpcoes = null;
   }
 
   return {
@@ -195,7 +209,8 @@ export function recalcularOperacao(op: Operacao): Operacao {
     premioLiquidoAcumulado,
     precoMedioAtual,
     historicoRolagens: rolagens,
-    resultadoFinal
+    resultadoFinal,
+    valorContadoComoResultadoOpcoes
   };
 }
 
@@ -205,7 +220,7 @@ export function OperationsProvider({ children }: { children: React.ReactNode }) 
     if (saved) {
       try {
         const parsed = JSON.parse(saved) as Operacao[];
-        return parsed.map(op => garantirHistoricoEventos(op));
+        return parsed.map(op => recalcularOperacao(garantirHistoricoEventos(op)));
       } catch (e) {
         console.error("Failed to parse operations from local storage", e);
         return [];
@@ -215,6 +230,7 @@ export function OperationsProvider({ children }: { children: React.ReactNode }) 
   });
 
   const [undoStack, setUndoStack] = useState<Operacao[][]>([]);
+  const [undoIntegradoFn, setUndoIntegradoFn] = useState<(() => void) | null>(null);
   const [toast, setToast] = useState<{ id: string; mensagem: string; action?: { label: string; onClick: () => void } } | null>(null);
   const [dismissedBannerKey, setDismissedBannerKey] = useState<string | null>(null);
 
@@ -250,7 +266,17 @@ export function OperationsProvider({ children }: { children: React.ReactNode }) 
     });
   };
 
+  const restaurarOperacoesSnapshot = (snapshot: Operacao[]) => {
+    setOperacoes(snapshot);
+  };
+
   const desfazer = () => {
+    if (undoIntegradoFn) {
+      const fn = undoIntegradoFn;
+      setUndoIntegradoFn(null);
+      fn();
+      return;
+    }
     if (undoStack.length === 0) return;
     const previousState = undoStack[undoStack.length - 1];
     setUndoStack(prev => prev.slice(0, -1));
@@ -653,6 +679,31 @@ export function OperationsProvider({ children }: { children: React.ReactNode }) 
     });
   };
 
+  const atribuirGrupoEstrategia = (opIds: string | string[], grupo: string | null) => {
+    const ids = Array.isArray(opIds) ? new Set(opIds) : new Set([opIds]);
+    const grupoLimpo = grupo && grupo.trim() !== '' ? grupo.trim() : null;
+
+    updateOperacoesWithUndo(prev => prev.map(op => {
+      if (!ids.has(op.id)) return op;
+      return {
+        ...op,
+        grupoEstrategia: grupoLimpo
+      };
+    }));
+
+    if (grupoLimpo) {
+      showToast(`Estratégia "${grupoLimpo}" atribuída!`, {
+        label: "Desfazer",
+        onClick: desfazer
+      });
+    } else {
+      showToast("Operação removida da estratégia!", {
+        label: "Desfazer",
+        onClick: desfazer
+      });
+    }
+  };
+
   const importarDados = (dados: Operacao[], substituir: boolean) => {
     updateOperacoesWithUndo(prev => {
       const carregados = dados.map(op => garantirHistoricoEventos(op));
@@ -687,10 +738,14 @@ export function OperationsProvider({ children }: { children: React.ReactNode }) 
       excluirOperacao,
       editarEvento,
       excluirEvento,
+      atribuirGrupoEstrategia,
       importarDados, 
       limparDados,
       desfazer,
-      podeDesfazer: undoStack.length > 0,
+      podeDesfazer: undoStack.length > 0 || undoIntegradoFn !== null,
+      restaurarOperacoesSnapshot,
+      undoIntegradoFn,
+      setUndoIntegradoFn,
       toast,
       showToast,
       hideToast,

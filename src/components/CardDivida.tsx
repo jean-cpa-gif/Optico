@@ -17,21 +17,28 @@ import {
   Link2, 
   Clock, 
   Trash2, 
-  CheckCircle, 
-  AlertCircle,
-  HelpCircle,
-  CheckCircle2,
-  ExternalLink,
+  CheckCircle2, 
   Edit2
 } from 'lucide-react';
+import { ModalConfirmarExclusao } from './ModalConfirmarExclusao';
+import { ModalEditarDivida } from './ModalEditarDivida';
+import { ModalEditarLancamento } from './ModalEditarLancamento';
 
 interface CardDividaProps {
+  key?: string;
   divida: Divida;
   operacoesEncerradas: Operacao[];
   onLancarJuro: (divida: Divida) => void;
   onLancarAmortizacao: (divida: Divida) => void;
   onMarcarQuitada: (id: string, quitada: boolean) => void;
+  onEditarDivida: (id: string, dados: Partial<Omit<Divida, 'id' | 'historico'>>) => void;
   onExcluirDivida: (id: string) => void;
+  onEditarItemHistorico: (dividaId: string, itemId: string, dados: {
+    data?: string;
+    valor?: number;
+    tipo?: ItemHistoricoDivida['tipo'];
+    observacao?: string;
+  }) => void;
   onExcluirItemHistorico: (dividaId: string, itemId: string) => void;
   onVerOperacaoVinculada?: (operacaoId: string) => void;
 }
@@ -42,13 +49,26 @@ export function CardDivida({
   onLancarJuro,
   onLancarAmortizacao,
   onMarcarQuitada,
+  onEditarDivida,
   onExcluirDivida,
+  onEditarItemHistorico,
   onExcluirItemHistorico,
   onVerOperacaoVinculada
 }: CardDividaProps) {
   const [expandido, setExpandido] = useState(false);
   const [estimativaAmortManual, setEstimativaAmortManual] = useState<string>('');
   const [mostrarAjusteProjecao, setMostrarAjusteProjecao] = useState(false);
+
+  // Modais de edição e confirmação de exclusão
+  const [modalEditarDividaOpen, setModalEditarDividaOpen] = useState(false);
+  const [itemParaEditar, setItemParaEditar] = useState<ItemHistoricoDivida | null>(null);
+  const [modalConfirmacao, setModalConfirmacao] = useState<{
+    isOpen: boolean;
+    titulo: string;
+    descricao: React.ReactNode;
+    textoBotaoConfirmar?: string;
+    onConfirm: () => void;
+  } | null>(null);
 
   const totalAmortizado = Math.max(0, divida.saldoInicial - divida.saldoAtual);
   const progressoPercent = divida.saldoInicial > 0
@@ -77,8 +97,6 @@ export function CardDivida({
   if (divida.status === 'quitada' || divida.saldoAtual <= 0) {
     projecaoTexto = 'Dívida já quitada 🎉';
   } else if (amortizacaoMensalBase > 0) {
-    // Considerando taxa de juros aproximada ou abatimento puro
-    // Se a amortização for menor ou igual ao juro mensal, nunca quita
     const juroEstimadoMensal = divida.saldoAtual * (divida.taxaJurosMensalPercent / 100);
     const amortizacaoLiquida = amortizacaoMensalBase - juroEstimadoMensal;
 
@@ -98,7 +116,7 @@ export function CardDivida({
     }
   }
 
-  // Ordena histórico em ordem cronológica (ou invertida para ver mais recentes primeiro, ou cronológica crescente como timeline)
+  // Ordena histórico em ordem cronológica crescente
   const historicoOrdenado = [...divida.historico].sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
 
   return (
@@ -288,8 +306,8 @@ export function CardDivida({
         )}
       </div>
 
-      {/* Botão de Expansão da Timeline */}
-      <div className="border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 px-5 py-3 flex items-center justify-between">
+      {/* Barra de Ações do Rodapé do Card */}
+      <div className="border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 px-5 py-3 flex items-center justify-between flex-wrap gap-2">
         <button
           onClick={() => setExpandido(!expandido)}
           className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
@@ -323,16 +341,43 @@ export function CardDivida({
 
           <span className="text-slate-300 dark:text-slate-700">|</span>
 
+          {/* Botão Editar Dívida */}
           <button
+            type="button"
+            onClick={() => setModalEditarDividaOpen(true)}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors cursor-pointer"
+            title="Editar informações da dívida cadastrada"
+          >
+            <Edit2 className="w-3.5 h-3.5" />
+            <span>Editar</span>
+          </button>
+
+          {/* Botão Excluir Dívida com Modal de Confirmação Confiável */}
+          <button
+            type="button"
             onClick={() => {
-              if (window.confirm(`Tem certeza que deseja excluir a dívida "${divida.nome}"?`)) {
-                onExcluirDivida(divida.id);
-              }
+              setModalConfirmacao({
+                isOpen: true,
+                titulo: 'Excluir Dívida',
+                descricao: (
+                  <div className="space-y-2">
+                    <p>
+                      Tem certeza que deseja excluir a dívida <strong className="text-slate-900 dark:text-white">"{divida.nome}"</strong>?
+                    </p>
+                    <p className="text-rose-600 dark:text-rose-400 text-xs">
+                      Esta ação removerá esta dívida e todos os seus lançamentos de juros e amortizações.
+                    </p>
+                  </div>
+                ),
+                textoBotaoConfirmar: 'Sim, Excluir Dívida',
+                onConfirm: () => onExcluirDivida(divida.id)
+              });
             }}
-            className="text-slate-400 hover:text-rose-500 transition-colors p-1 rounded cursor-pointer"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
             title="Excluir Dívida"
           >
             <Trash2 className="w-3.5 h-3.5" />
+            <span>Excluir</span>
           </button>
         </div>
       </div>
@@ -340,9 +385,14 @@ export function CardDivida({
       {/* Seção Expandida: Timeline Completa */}
       {expandido && (
         <div className="border-t border-slate-100 dark:border-slate-800 p-5 bg-white dark:bg-slate-850">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-4">
-            Timeline de Lançamentos & Amortizações
-          </h4>
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              Timeline de Lançamentos & Amortizações
+            </h4>
+            <span className="text-[11px] text-slate-400">
+              {historicoOrdenado.length} {historicoOrdenado.length === 1 ? 'lançamento' : 'lançamentos'}
+            </span>
+          </div>
 
           {historicoOrdenado.length === 0 ? (
             <div className="py-6 text-center text-xs text-slate-400">
@@ -360,6 +410,14 @@ export function CardDivida({
                   ? operacoesEncerradas.find(o => o.id === item.operacaoVinculadaId)
                   : null;
 
+                const tipoRotulo = isJuro 
+                  ? 'Juro Mensal' 
+                  : isAmort 
+                  ? 'Amortização' 
+                  : isIncremento 
+                  ? 'Prejuízo / Incremento' 
+                  : 'Ajuste';
+
                 return (
                   <div key={item.id} className="relative group">
                     {/* Marcador na linha do tempo */}
@@ -373,7 +431,7 @@ export function CardDivida({
                         : 'border-blue-500 text-blue-500'
                     }`} />
 
-                    <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200/70 dark:border-slate-700/70 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200/70 dark:border-slate-700/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
@@ -385,7 +443,7 @@ export function CardDivida({
                               ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300'
                               : 'bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300'
                           }`}>
-                            {isJuro ? 'Juro Mensal' : isAmort ? 'Amortização' : isIncremento ? 'Prejuízo / Incremento' : 'Ajuste'}
+                            {tipoRotulo}
                           </span>
                           
                           <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
@@ -417,7 +475,7 @@ export function CardDivida({
                         )}
                       </div>
 
-                      <div className="flex items-center justify-between sm:justify-end gap-4">
+                      <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4">
                         <div className="text-left sm:text-right">
                           <span className={`font-mono font-bold text-sm block ${
                             isJuro || isIncremento
@@ -431,17 +489,43 @@ export function CardDivida({
                           </span>
                         </div>
 
-                        <button
-                          onClick={() => {
-                            if (window.confirm('Excluir este lançamento e recalcular o saldo?')) {
-                              onExcluirItemHistorico(divida.id, item.id);
-                            }
-                          }}
-                          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-500 transition-opacity p-1 rounded cursor-pointer"
-                          title="Excluir lançamento"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {/* Botões de Editar e Excluir Alteração / Lançamento */}
+                        <div className="flex items-center gap-1 bg-white dark:bg-slate-700/60 p-1 rounded-lg border border-slate-200 dark:border-slate-600">
+                          <button
+                            type="button"
+                            onClick={() => setItemParaEditar(item)}
+                            className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors p-1 rounded cursor-pointer"
+                            title="Editar este lançamento"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setModalConfirmacao({
+                                isOpen: true,
+                                titulo: 'Excluir Lançamento',
+                                descricao: (
+                                  <div className="space-y-2">
+                                    <p>
+                                      Deseja excluir o lançamento de <strong className="text-slate-900 dark:text-white">{tipoRotulo}</strong> no valor de <strong className="text-slate-900 dark:text-white">{formatCurrency(item.valor)}</strong> do dia {formatDate(item.data)}?
+                                    </p>
+                                    <p className="text-slate-500 dark:text-slate-400 text-xs">
+                                      O saldo resultante da dívida será recalculado automaticamente em cadeia.
+                                    </p>
+                                  </div>
+                                ),
+                                textoBotaoConfirmar: 'Excluir Lançamento',
+                                onConfirm: () => onExcluirItemHistorico(divida.id, item.id)
+                              });
+                            }}
+                            className="text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors p-1 rounded cursor-pointer"
+                            title="Excluir lançamento e recalcular saldo"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -450,6 +534,35 @@ export function CardDivida({
             </div>
           )}
         </div>
+      )}
+
+      {/* Modal de Editar Dívida */}
+      <ModalEditarDivida
+        isOpen={modalEditarDividaOpen}
+        divida={divida}
+        onClose={() => setModalEditarDividaOpen(false)}
+        onConfirm={onEditarDivida}
+      />
+
+      {/* Modal de Editar Lançamento */}
+      <ModalEditarLancamento
+        isOpen={!!itemParaEditar}
+        dividaNome={divida.nome}
+        item={itemParaEditar}
+        onClose={() => setItemParaEditar(null)}
+        onConfirm={(itemId, dados) => onEditarItemHistorico(divida.id, itemId, dados)}
+      />
+
+      {/* Modal de Confirmação de Exclusão (Dívida ou Lançamento) */}
+      {modalConfirmacao && (
+        <ModalConfirmarExclusao
+          isOpen={modalConfirmacao.isOpen}
+          titulo={modalConfirmacao.titulo}
+          descricao={modalConfirmacao.descricao}
+          textoBotaoConfirmar={modalConfirmacao.textoBotaoConfirmar}
+          onClose={() => setModalConfirmacao(null)}
+          onConfirm={modalConfirmacao.onConfirm}
+        />
       )}
     </div>
   );

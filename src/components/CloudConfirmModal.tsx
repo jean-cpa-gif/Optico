@@ -17,7 +17,9 @@ interface CloudConfirmModalProps {
   onConfirm: () => void;
   loading: boolean;
   localCount: number;
+  localDividasCount?: number | null;
   cloudCount?: number | null;
+  cloudDividasCount?: number | null;
   lastBackupDate?: string | null;
   userEmail?: string | null;
 }
@@ -29,7 +31,9 @@ export default function CloudConfirmModal({
   onConfirm,
   loading,
   localCount,
+  localDividasCount,
   cloudCount,
+  cloudDividasCount,
   lastBackupDate,
   userEmail
 }: CloudConfirmModalProps) {
@@ -100,10 +104,11 @@ export default function CloudConfirmModal({
             <div className="flex items-center justify-between">
               <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
                 <Layers className="w-3.5 h-3.5 text-blue-500" />
-                Operações no dispositivo atual:
+                Dados no dispositivo atual:
               </span>
               <span className="font-bold text-slate-800 dark:text-slate-200 font-mono">
                 {localCount} {localCount === 1 ? 'operação' : 'operações'}
+                {localDividasCount !== undefined && localDividasCount !== null && ` e ${localDividasCount} dívidas`}
               </span>
             </div>
 
@@ -111,10 +116,11 @@ export default function CloudConfirmModal({
               <div className="flex items-center justify-between">
                 <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                  Operações salvas na nuvem:
+                  Dados salvos na nuvem:
                 </span>
                 <span className="font-bold text-slate-800 dark:text-slate-200 font-mono">
                   {cloudCount} {cloudCount === 1 ? 'operação' : 'operações'}
+                  {cloudDividasCount !== undefined && cloudDividasCount !== null && ` e ${cloudDividasCount} dívidas`}
                 </span>
               </div>
             )}

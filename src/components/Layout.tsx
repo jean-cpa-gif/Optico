@@ -11,15 +11,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { theme, setTheme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
-  const { podeDesfazer: podeDesfazerOp, desfazer: desfazerOp, toast, hideToast } = useOperations();
+  const { podeDesfazer: podeDesfazerOp, desfazer: desfazerOp, undoIntegradoFn, toast, hideToast } = useOperations();
   const { podeDesfazer: podeDesfazerDividas, desfazer: desfazerDividas } = useDividas();
 
   const isDividasRoute = location.pathname.startsWith('/dividas');
-  const podeDesfazer = isDividasRoute ? podeDesfazerDividas : (podeDesfazerOp || podeDesfazerDividas);
+  const podeDesfazer = undoIntegradoFn !== null || (isDividasRoute ? (podeDesfazerDividas || podeDesfazerOp) : (podeDesfazerOp || podeDesfazerDividas));
 
   const handleGlobalDesfazer = () => {
+    if (undoIntegradoFn) {
+      desfazerOp();
+      return;
+    }
     if (isDividasRoute) {
-      if (podeDesfazerDividas) desfazerDividas();
+      if (podeDesfazerDividas) {
+        desfazerDividas();
+      } else if (podeDesfazerOp) {
+        desfazerOp();
+      }
     } else {
       if (podeDesfazerOp) {
         desfazerOp();

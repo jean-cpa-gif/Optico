@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/store/AuthContext';
 import { useOperations } from '@/store/OperationsContext';
+import { useDividas } from '@/store/DividasContext';
 import { cn, formatDate } from '@/lib/utils';
 import CloudConfirmModal from './CloudConfirmModal';
 
@@ -35,6 +36,7 @@ export default function CloudSyncMenu() {
   } = useAuth();
   
   const { operacoes, importarDados, showToast } = useOperations();
+  const { dividas, importarDividas } = useDividas();
 
   const [isOpen, setIsOpen] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -118,8 +120,8 @@ export default function CloudSyncMenu() {
     if (!user) return;
     try {
       setUploading(true);
-      const res = await fazerBackupNuvem(operacoes);
-      showToast(`Backup de ${res.count} operações salvo na nuvem com sucesso!`);
+      const res = await fazerBackupNuvem(operacoes, dividas);
+      showToast(`Backup de ${res.count} operações e ${dividas.length} dívidas salvo na nuvem com sucesso!`);
       setConfirmModal(null);
     } catch (err: any) {
       showToast(`Erro ao salvar na nuvem: ${err.message || 'Tente novamente'}`);
@@ -140,7 +142,11 @@ export default function CloudSyncMenu() {
       }
 
       importarDados(res.dados, true);
-      showToast(`Download concluído: ${res.dados.length} operações restauradas da nuvem!`);
+      if (res.dividas && res.dividas.length > 0) {
+        importarDividas(res.dividas, true);
+      }
+      const msgDividas = res.dividas && res.dividas.length > 0 ? ` e ${res.dividas.length} dívidas` : '';
+      showToast(`Download concluído: ${res.dados.length} operações${msgDividas} restauradas da nuvem!`);
       setConfirmModal(null);
     } catch (err: any) {
       showToast(`Erro ao baixar da nuvem: ${err.message || 'Tente novamente'}`);
@@ -494,7 +500,9 @@ export default function CloudSyncMenu() {
           onConfirm={confirmModal.type === 'upload' ? handleConfirmBackup : handleConfirmDownload}
           loading={confirmModal.type === 'upload' ? uploading : downloading}
           localCount={operacoes.length}
+          localDividasCount={dividas.length}
           cloudCount={cloudBackupInfo?.totalOperacoes}
+          cloudDividasCount={cloudBackupInfo?.totalDividas}
           lastBackupDate={cloudBackupInfo?.lastBackupDate}
           userEmail={user?.email}
         />

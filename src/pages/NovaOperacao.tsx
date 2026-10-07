@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useOperations } from '@/store/OperationsContext';
 
 export default function NovaOperacao() {
-  const { addOperacao } = useOperations();
+  const { operacoes, addOperacao } = useOperations();
   const navigate = useNavigate();
+
+  const gruposCadastrados = Array.from(new Set(operacoes.map(op => op.grupoEstrategia).filter(Boolean) as string[])).sort();
 
   const [direcaoInicial, setDirecaoInicial] = useState<'C' | 'V'>('V');
   const [ativo, setAtivo] = useState('');
@@ -14,6 +16,7 @@ export default function NovaOperacao() {
   const [precoMedioOriginal, setPrecoMedioOriginal] = useState('');
   const [dataAbertura, setDataAbertura] = useState(new Date().toISOString().split('T')[0]);
   const [vencimentoAtual, setVencimentoAtual] = useState('');
+  const [grupoEstrategia, setGrupoEstrategia] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,6 +31,7 @@ export default function NovaOperacao() {
       precoMedioOriginal: parseFloat(precoMedioOriginal),
       dataAbertura,
       vencimentoAtual,
+      grupoEstrategia: grupoEstrategia.trim() ? grupoEstrategia.trim() : null
     });
 
     navigate('/abertas');
@@ -144,6 +148,26 @@ export default function NovaOperacao() {
               onChange={(e) => setVencimentoAtual(e.target.value)}
               className="w-full rounded-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Estratégia / Grupo (opcional)</label>
+            <input
+              type="text"
+              placeholder="Ex: Trava de Alta PETR4, Straddle BOVA11, Iron Condor..."
+              list="lista-grupos-nova"
+              value={grupoEstrategia}
+              onChange={(e) => setGrupoEstrategia(e.target.value)}
+              className="w-full rounded-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <datalist id="lista-grupos-nova">
+              {gruposCadastrados.map(g => (
+                <option key={g} value={g} />
+              ))}
+            </datalist>
+            <p className="text-[10px] text-slate-400 mt-1">
+              Dica: Você pode agrupar operações como pernas de uma mesma estratégia para acompanhar o resultado conjunto.
+            </p>
           </div>
         </div>
 

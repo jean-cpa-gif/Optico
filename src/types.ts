@@ -69,6 +69,7 @@ export interface Operacao {
   valorVinculadoDivida?: number | null;
   dividaVinculadaId?: string | null;
   valorContadoComoResultadoOpcoes?: number | null;
+  grupoEstrategia?: string | null;
 }
 
 export type StatusDivida = 'aberta' | 'quitada';
@@ -82,6 +83,7 @@ export interface ItemHistoricoDivida {
   saldoResultante: number;
   operacaoVinculadaId?: string | null;
   observacao?: string;
+  ehCriacaoOrigem?: boolean;
 }
 
 export interface Divida {
@@ -94,5 +96,12 @@ export interface Divida {
   taxaJurosMensalPercent: number;
   status: StatusDivida;
   historico: ItemHistoricoDivida[];
+}
+
+export interface BackupCompletoData {
+  versao?: number;
+  dataExportacao?: string;
+  operacoes: Operacao[];
+  dividas?: Divida[];
 }
 

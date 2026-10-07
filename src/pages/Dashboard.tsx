@@ -21,11 +21,10 @@ export default function Dashboard() {
   const encerradas = operacoes.filter(op => op.status === 'encerrada');
 
   // Regra de não-duplicação (Item 3 do requisito):
+  // Usar valorContadoComoResultadoOpcoes exclusivamente na composição dos cards do Dashboard.
+  // Atenção: zero é um valor válido; utilizar valorContadoComoResultadoOpcoes ?? resultadoFinal, não ||.
   const getValorConsiderado = (op: typeof operacoes[0]) => {
-    if (op.valorContadoComoResultadoOpcoes !== null && op.valorContadoComoResultadoOpcoes !== undefined) {
-      return op.valorContadoComoResultadoOpcoes;
-    }
-    return op.resultadoFinal || 0;
+    return (op.valorContadoComoResultadoOpcoes ?? op.resultadoFinal) ?? 0;
   };
 
   // 1. "Resultado das Opções" — soma de valorConsiderado de todas as operações encerradas
@@ -53,15 +52,26 @@ export default function Dashboard() {
   // 3. "Resultado Líquido Total" — Resultado das Opções - Dívida em Aberto
   const resultadoLiquidoTotal = resultadoOpcoesLimpo - dividaEmAberto;
 
-  const ganhadoras = encerradas.filter(op => (op.resultadoFinal || 0) > 0).length;
-  const perdedoras = encerradas.filter(op => (op.resultadoFinal || 0) < 0).length;
+  // ESTATÍSTICAS DE DESEMPENHO REAL DAS OPERAÇÕES:
+  // "Nas estatísticas de desempenho das operações — lucro/prejuízo acumulado, taxa de acerto, médias de ganhos e perdas
+  // e gráficos de desempenho, quando existentes — usar sempre resultadoFinal, independentemente de vínculo com dívida."
+  const resultadoRealTotal = encerradas.reduce((acc, op) => acc + (op.resultadoFinal ?? 0), 0);
+  const operacoesGanhadoras = encerradas.filter(op => (op.resultadoFinal ?? 0) > 0);
+  const operacoesPerdedoras = encerradas.filter(op => (op.resultadoFinal ?? 0) < 0);
+  const ganhadoras = operacoesGanhadoras.length;
+  const perdedoras = operacoesPerdedoras.length;
   const taxaAcerto = encerradas.length > 0 ? (ganhadoras / encerradas.length) * 100 : 0;
 
-  // Chart: Result per month usando getValorConsiderado
+  const somaGanhos = operacoesGanhadoras.reduce((acc, op) => acc + (op.resultadoFinal ?? 0), 0);
+  const somaPerdas = operacoesPerdedoras.reduce((acc, op) => acc + (op.resultadoFinal ?? 0), 0);
+  const mediaGanho = ganhadoras > 0 ? somaGanhos / ganhadoras : 0;
+  const mediaPerda = perdedoras > 0 ? somaPerdas / perdedoras : 0;
+
+  // Gráficos de Desempenho usando resultadoFinal integral
   const resultPorMes = encerradas.reduce((acc, op) => {
     if (!op.dataEncerramento) return acc;
     const mes = op.dataEncerramento.substring(0, 7); // YYYY-MM
-    acc[mes] = (acc[mes] || 0) + getValorConsiderado(op);
+    acc[mes] = (acc[mes] || 0) + (op.resultadoFinal ?? 0);
     return acc;
   }, {} as Record<string, number>);
 
@@ -69,9 +79,8 @@ export default function Dashboard() {
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([mes, valor]): { mes: string; valor: number } => ({ mes, valor: valor as number }));
 
-  // Chart: Result per Asset usando getValorConsiderado
   const resultPorAtivo = encerradas.reduce((acc, op) => {
-    acc[op.ativo] = (acc[op.ativo] || 0) + getValorConsiderado(op);
+    acc[op.ativo] = (acc[op.ativo] || 0) + (op.resultadoFinal ?? 0);
     return acc;
   }, {} as Record<string, number>);
 
@@ -270,11 +279,19 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Métricas Auxiliares */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {/* Estatísticas de Desempenho Real das Operações */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-white dark:bg-slate-800 p-3 rounded-md card-shadow border border-slate-200 dark:border-slate-700">
+          <div className="text-[10px] font-semibold text-slate-400 uppercase mb-0.5">Desempenho Integral (Trades)</div>
+          <div className={`text-lg sm:text-xl font-bold font-mono ${resultadoRealTotal >= 0 ? 'text-emerald-600 dark:text-emerald-500' : 'text-rose-600 dark:text-rose-500'}`}>
+            {formatCurrency(resultadoRealTotal)}
+          </div>
+          <span className="text-[10px] text-slate-400">Total gerado em opções</span>
+        </div>
+
         <div className="bg-white dark:bg-slate-800 p-3 rounded-md card-shadow border border-slate-200 dark:border-slate-700">
           <div className="text-[10px] font-semibold text-slate-400 uppercase mb-0.5">Taxa de Acerto</div>
-          <div className="text-xl font-bold font-mono text-slate-900 dark:text-slate-100">
+          <div className="text-lg sm:text-xl font-bold font-mono text-slate-900 dark:text-slate-100">
             {taxaAcerto.toFixed(1)}%
           </div>
           <div className="flex h-1 w-full bg-slate-100 dark:bg-slate-700 rounded-full mt-1.5 overflow-hidden">
@@ -283,24 +300,33 @@ export default function Dashboard() {
         </div>
 
         <div className="bg-white dark:bg-slate-800 p-3 rounded-md card-shadow border border-slate-200 dark:border-slate-700">
-          <div className="text-[10px] font-semibold text-slate-400 uppercase mb-0.5">Operações Abertas</div>
-          <div className="text-xl font-bold font-mono text-slate-900 dark:text-slate-100">
-            {abertas.length}
+          <div className="text-[10px] font-semibold text-slate-400 uppercase mb-0.5">Média Ganho / Perda</div>
+          <div className="text-xs font-mono font-bold mt-1 space-y-0.5">
+            <div className="text-emerald-600 dark:text-emerald-400">
+              +{formatCurrency(mediaGanho)} <span className="text-[10px] font-normal text-slate-400 font-sans">({ganhadoras})</span>
+            </div>
+            <div className="text-rose-600 dark:text-rose-400">
+              {formatCurrency(mediaPerda)} <span className="text-[10px] font-normal text-slate-400 font-sans">({perdedoras})</span>
+            </div>
           </div>
         </div>
 
         <div className="bg-white dark:bg-slate-800 p-3 rounded-md card-shadow border border-slate-200 dark:border-slate-700">
-          <div className="text-[10px] font-semibold text-slate-400 uppercase mb-0.5">Operações Encerradas</div>
-          <div className="text-xl font-bold font-mono text-slate-900 dark:text-slate-100">
-            {encerradas.length}
+          <div className="text-[10px] font-semibold text-slate-400 uppercase mb-0.5">Operações Cadastradas</div>
+          <div className="text-lg sm:text-xl font-bold font-mono text-slate-900 dark:text-slate-100">
+            {encerradas.length} <span className="text-xs font-normal text-slate-400 font-sans">encerradas</span>
           </div>
+          <span className="text-[10px] text-slate-400">{abertas.length} em aberto</span>
         </div>
       </div>
 
-      {/* Gráficos */}
+      {/* Gráficos de Desempenho Real (baseados em resultadoFinal) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-white dark:bg-slate-800 p-4 rounded-md border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
-          <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200 mb-3">Resultado das Opções por Mês</h3>
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">Desempenho por Mês (Resultado Real)</h3>
+            <span className="text-[10px] text-slate-400 font-medium">resultadoFinal integral</span>
+          </div>
           <div className="h-56">
             {dataGraficoMes.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -311,7 +337,7 @@ export default function Dashboard() {
                   <Tooltip 
                     cursor={{ fill: theme === 'dark' ? '#1f2937' : '#f3f4f6' }}
                     contentStyle={{ backgroundColor: theme === 'dark' ? '#111827' : '#ffffff', borderColor: gridColor, borderRadius: '8px' }}
-                    formatter={(value: number) => [formatCurrency(value), 'Resultado']}
+                    formatter={(value: number) => [formatCurrency(value), 'Resultado Real']}
                   />
                   <Bar dataKey="valor" radius={[4, 4, 0, 0]}>
                     {dataGraficoMes.map((entry, index) => (
@@ -327,7 +353,10 @@ export default function Dashboard() {
         </div>
 
         <div className="bg-white dark:bg-slate-800 p-4 rounded-md border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
-          <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200 mb-3">Resultado das Opções por Ativo</h3>
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">Desempenho por Ativo (Resultado Real)</h3>
+            <span className="text-[10px] text-slate-400 font-medium">resultadoFinal integral</span>
+          </div>
           <div className="h-56">
             {dataGraficoAtivo.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">

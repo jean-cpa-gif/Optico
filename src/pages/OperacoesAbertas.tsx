@@ -4,7 +4,7 @@ import { useDividas } from '@/store/DividasContext';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { differenceInDays } from 'date-fns';
 import { Operacao, EventoOperacao, Divida } from '@/types';
-import { X, ChevronDown, ChevronUp, Pencil, Trash2, Clock, Plus, AlertTriangle, SlidersHorizontal, Search, Scissors, Link2 } from 'lucide-react';
+import { X, ChevronDown, ChevronUp, Pencil, Trash2, Clock, Plus, AlertTriangle, SlidersHorizontal, Search, Scissors, Link2, Layers } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import VencimentoAlerta from '@/components/VencimentoAlerta';
 import { 
@@ -15,19 +15,29 @@ import {
   ModalEditarEvento 
 } from '@/components/Modals';
 import { ModalVincularDivida } from '@/components/ModalVincularDivida';
+import { ModalAgruparEstrategia } from '@/components/ModalAgruparEstrategia';
+import { ResumoConjuntoEstrategia } from '@/components/ResumoConjuntoEstrategia';
 
 export default function OperacoesAbertas() {
-  const { operacoes, rolarOperacao, encerrarOperacao, aumentarPosicao, dividirOperacao, editarOperacao, excluirOperacao, editarEvento, excluirEvento } = useOperations();
-  const { dividas, lancarAmortizacao, somarPrejuizoDivida, criarDividaDePrejuizo } = useDividas();
+  const { operacoes, rolarOperacao, encerrarOperacao, aumentarPosicao, dividirOperacao, editarOperacao, excluirOperacao, editarEvento, excluirEvento, atribuirGrupoEstrategia } = useOperations();
+  const { dividas, encerrarOperacaoComVinculo } = useDividas();
   const abertas = operacoes.filter(op => op.status === 'aberta');
   const dividasAtivas = dividas.filter(d => d.status === 'aberta');
   const location = useLocation();
 
   const [direcao, setDirecao] = useState<'todas' | 'V' | 'C'>('todas');
   const [tipoOpcao, setTipoOpcao] = useState<'todas' | 'PUT' | 'CALL'>('todas');
+  const [filtroEstrategia, setFiltroEstrategia] = useState<string>(location.state?.estrategia || 'todas');
   const [busca, setBusca] = useState('');
   const [showSugestoes, setShowSugestoes] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
+
+  // Sync if location state has a strategy passed
+  useEffect(() => {
+    if (location.state?.estrategia) {
+      setFiltroEstrategia(location.state.estrategia);
+    }
+  }, [location.state?.estrategia]);
 
   const [ordenacao, setOrdenacao] = useState<'proximos' | 'distantes'>(() => {
     if (location.state?.sortByExpiry) {
@@ -36,7 +46,7 @@ export default function OperacoesAbertas() {
     return 'proximos';
   });
   const [showFilters, setShowFilters] = useState(() => {
-    if (location.state?.sortByExpiry) {
+    if (location.state?.sortByExpiry || location.state?.estrategia) {
       return true;
     }
     return false;
@@ -62,6 +72,7 @@ export default function OperacoesAbertas() {
   const [editarModal, setEditarModal] = useState<{ op: Operacao | null; open: boolean }>({ op: null, open: false });
   const [excluirModal, setExcluirModal] = useState<{ op: Operacao | null; open: boolean }>({ op: null, open: false });
   const [editarEventoModal, setEditarEventoModal] = useState<{ op: Operacao | null; evento: EventoOperacao | null; open: boolean }>({ op: null, evento: null, open: false });
+  const [agruparModal, setAgruparModal] = useState<{ op: Operacao | null; open: boolean }>({ op: null, open: false });
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -76,6 +87,7 @@ export default function OperacoesAbertas() {
   }, []);
 
   const todasOpcoesCadastradas = Array.from(new Set(operacoes.map(op => op.ativo))).sort() as string[];
+  const gruposCadastrados = Array.from(new Set(operacoes.map(op => op.grupoEstrategia).filter(Boolean) as string[])).sort();
 
   const sugestoesFiltradas = todasOpcoesCadastradas.filter((ativo: string) => {
     if (!busca) return true;
@@ -83,12 +95,26 @@ export default function OperacoesAbertas() {
            ativo.toLowerCase() !== busca.toLowerCase();
   }).slice(0, 6);
 
+  // Strategy operations helper for filtered view
+  const isEstrategiaEspecifica = filtroEstrategia !== 'todas' && filtroEstrategia !== 'sem_grupo';
+  const pernasDaEstrategia = isEstrategiaEspecifica 
+    ? operacoes.filter(op => op.grupoEstrategia === filtroEstrategia)
+    : [];
+  const pernasEncerradasDaEstrategia = pernasDaEstrategia.filter(op => op.status === 'encerrada');
+
   // Filter and sort the open operations in real-time
   const filteredAndSorted = abertas.filter(op => {
     const matchDirecao = direcao === 'todas' || op.direcaoInicial === direcao;
     const matchTipo = tipoOpcao === 'todas' || op.tipoOpcao === tipoOpcao;
     const matchBusca = !busca || op.ativo.toLowerCase().includes(busca.toLowerCase());
-    return matchDirecao && matchTipo && matchBusca;
+    const matchEstrategia = 
+      filtroEstrategia === 'todas' 
+        ? true 
+        : filtroEstrategia === 'sem_grupo' 
+          ? !op.grupoEstrategia 
+          : op.grupoEstrategia === filtroEstrategia;
+
+    return matchDirecao && matchTipo && matchBusca && matchEstrategia;
   }).sort((a, b) => {
     const tA = new Date(a.vencimentoAtual).getTime();
     const tB = new Date(b.vencimentoAtual).getTime();
@@ -101,7 +127,7 @@ export default function OperacoesAbertas() {
 
   // Calculate total award for currently visible operations
   const totalPremioVisivel = filteredAndSorted.reduce((acc, op) => acc + op.premioLiquidoAcumulado, 0);
-  const activeFiltersCount = (direcao !== 'todas' ? 1 : 0) + (tipoOpcao !== 'todas' ? 1 : 0) + (ordenacao !== 'proximos' ? 1 : 0) + (busca ? 1 : 0);
+  const activeFiltersCount = (direcao !== 'todas' ? 1 : 0) + (tipoOpcao !== 'todas' ? 1 : 0) + (ordenacao !== 'proximos' ? 1 : 0) + (busca ? 1 : 0) + (filtroEstrategia !== 'todas' ? 1 : 0);
 
   return (
     <div id="operacoes-abertas-container" className="space-y-6">
@@ -213,6 +239,7 @@ export default function OperacoesAbertas() {
                 onClick={() => {
                   setDirecao('todas');
                   setTipoOpcao('todas');
+                  setFiltroEstrategia('todas');
                   setOrdenacao('proximos');
                   setBusca('');
                 }}
@@ -226,6 +253,21 @@ export default function OperacoesAbertas() {
           {/* Discreet chips displaying active states if panel is collapsed */}
           {!showFilters && activeFiltersCount > 0 && (
             <div className="flex gap-1.5 flex-wrap">
+              {filtroEstrategia !== 'todas' && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-medium border border-indigo-200/60 dark:border-indigo-800/60 flex items-center gap-1">
+                  <Layers className="w-2.5 h-2.5 text-indigo-500" />
+                  Estratégia: {filtroEstrategia === 'sem_grupo' ? 'Sem grupo' : filtroEstrategia}
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFiltroEstrategia('todas');
+                    }} 
+                    className="hover:text-rose-500 font-bold ml-1 cursor-pointer text-[9px]"
+                  >
+                    ×
+                  </button>
+                </span>
+              )}
               {direcao !== 'todas' && (
                 <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium border border-slate-200/50 dark:border-slate-700/50">
                   Direção: {direcao === 'V' ? 'Vendidas' : 'Compradas'}
@@ -261,7 +303,23 @@ export default function OperacoesAbertas() {
 
         {/* Expandable Filter Details panel */}
         {showFilters && (
-          <div className="p-4 bg-slate-50/50 dark:bg-slate-900/20 rounded-lg border border-slate-200/60 dark:border-slate-800/60 grid grid-cols-1 sm:grid-cols-3 gap-4 animate-fade-in">
+          <div className="p-4 bg-slate-50/50 dark:bg-slate-900/20 rounded-lg border border-slate-200/60 dark:border-slate-800/60 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in">
+            {/* Estratégia Filter */}
+            <div className="space-y-1.5">
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Estratégia</label>
+              <select
+                value={filtroEstrategia}
+                onChange={(e) => setFiltroEstrategia(e.target.value)}
+                className="w-full text-xs font-semibold rounded border border-slate-200 bg-white px-3 py-1.5 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+              >
+                <option value="todas">Todas as estratégias</option>
+                <option value="sem_grupo">Sem grupo</option>
+                {gruposCadastrados.map(g => (
+                  <option key={g} value={g}>{g}</option>
+                ))}
+              </select>
+            </div>
+
             {/* Direção Filter */}
             <div className="space-y-1.5">
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Direção</label>
@@ -318,6 +376,15 @@ export default function OperacoesAbertas() {
         )}
       </div>
 
+      {/* Resumo Conjunto da Estratégia (quando filtrado por uma estratégia específica) */}
+      {isEstrategiaEspecifica && (
+        <ResumoConjuntoEstrategia
+          nomeEstrategia={filtroEstrategia}
+          pernas={pernasDaEstrategia}
+          onLimparFiltro={() => setFiltroEstrategia('todas')}
+        />
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {filteredAndSorted.map(op => (
           <OperacaoCard 
@@ -329,6 +396,8 @@ export default function OperacoesAbertas() {
             onAumentar={() => setAumentarModal({ op, open: true })}
             onEditar={() => setEditarModal({ op, open: true })}
             onExcluir={() => setExcluirModal({ op, open: true })}
+            onAgrupar={() => setAgruparModal({ op, open: true })}
+            onFiltrarEstrategia={(grupo) => setFiltroEstrategia(grupo)}
             onEditEvent={(evt) => setEditarEventoModal({ op, evento: evt, open: true })}
             onDeleteEvent={(evtId) => excluirEvento(op.id, evtId)}
             isExpanded={expandedId === op.id}
@@ -339,10 +408,45 @@ export default function OperacoesAbertas() {
           <div className="col-span-full py-12 text-center text-slate-500 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900/20">
             {abertas.length === 0 
               ? 'Nenhuma operação aberta no momento.' 
-              : 'Nenhuma operação aberta corresponde aos filtros selecionados.'}
+              : isEstrategiaEspecifica
+                ? `Nenhuma perna aberta encontrada para a estratégia "${filtroEstrategia}". (Veja as pernas encerradas abaixo)`
+                : 'Nenhuma operação aberta corresponde aos filtros selecionados.'}
           </div>
         )}
       </div>
+
+      {/* Se estiver filtrando uma estratégia específica e houver pernas encerradas nela, exibi-las aqui para visão completa de todas as pernas */}
+      {isEstrategiaEspecifica && pernasEncerradasDaEstrategia.length > 0 && (
+        <div className="space-y-4 pt-6 border-t border-slate-200 dark:border-slate-800">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                Pernas Encerradas desta Estratégia
+                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                  {pernasEncerradasDaEstrategia.length}
+                </span>
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Pernas já finalizadas que compõem a estratégia "{filtroEstrategia}"
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {pernasEncerradasDaEstrategia.map(op => (
+              <OperacaoEncerradaCard
+                key={op.id}
+                op={op}
+                dividas={dividas}
+                onEditar={() => setEditarModal({ op, open: true })}
+                onExcluir={() => setExcluirModal({ op, open: true })}
+                onAgrupar={() => setAgruparModal({ op, open: true })}
+                onFiltrarEstrategia={(g) => setFiltroEstrategia(g)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* MODALS */}
       {encerrarModal.open && encerrarModal.op && (
@@ -377,72 +481,17 @@ export default function OperacoesAbertas() {
           dividasAtivas={dividasAtivas}
           onClose={() => setVincularModal({ op: null, open: false, dataEncerramento: '', precoEncerramento: 0, resultadoProjetado: 0 })}
           onConfirm={({ precoEncerramento, dataEncerramento, tipoVinculo, dividaId, valorVinculado, novaDivida }) => {
-            const opId = vincularModal.op!.id;
-            const resFinal = vincularModal.resultadoProjetado;
-
-            if (tipoVinculo === 'amortizar_existente' && dividaId) {
-              // Caso A: Lucro amortizando dívida existente
-              const valorVinculadoDivida = valorVinculado; // positivo
-              const sobra = resFinal - valorVinculado;
-
-              // 1. Atualiza dívida
-              lancarAmortizacao({
-                dividaId,
-                data: dataEncerramento,
-                valor: valorVinculado,
-                operacaoVinculadaId: opId,
-                observacao: `Amortização com lucro da operação ${vincularModal.op!.ativo}`
-              });
-
-              // 2. Encerra operação com campos de vínculo
-              encerrarOperacao(opId, precoEncerramento, dataEncerramento, {
-                valorVinculadoDivida,
-                dividaVinculadaId: dividaId,
-                valorContadoComoResultadoOpcoes: sobra
-              });
-            } else if (tipoVinculo === 'somar_existente' && dividaId) {
-              // Caso B1: Prejuízo somado a dívida existente
-              const valorVinculadoDivida = -valorVinculado; // negativo (representa prejuízo redirecionado)
-              // sobra no resultado de opções: resFinal (negativo) - (-valorVinculado)
-              const sobra = resFinal - (-valorVinculado);
-
-              // 1. Incrementa dívida existente
-              somarPrejuizoDivida({
-                dividaId,
-                data: dataEncerramento,
-                valor: valorVinculado,
-                operacaoId: opId,
-                observacao: `Prejuízo da operação ${vincularModal.op!.ativo}`
-              });
-
-              // 2. Encerra operação com campos de vínculo
-              encerrarOperacao(opId, precoEncerramento, dataEncerramento, {
-                valorVinculadoDivida,
-                dividaVinculadaId: dividaId,
-                valorContadoComoResultadoOpcoes: sobra
-              });
-            } else if (tipoVinculo === 'criar_nova' && novaDivida) {
-              // Caso B2: Prejuízo criando nova dívida
-              const valorVinculadoDivida = -valorVinculado; // negativo
-              const sobra = resFinal - (-valorVinculado);
-
-              // 1. Cria nova dívida
-              const novaDividaId = criarDividaDePrejuizo({
-                nome: novaDivida.nome,
-                saldoInicial: valorVinculado,
-                dataInicio: dataEncerramento,
-                taxaJurosMensalPercent: novaDivida.taxaJurosMensalPercent,
-                operacaoId: opId,
-                observacao: `Dívida criada a partir de operação ${vincularModal.op!.ativo} encerrada com prejuízo`
-              });
-
-              // 2. Encerra operação
-              encerrarOperacao(opId, precoEncerramento, dataEncerramento, {
-                valorVinculadoDivida,
-                dividaVinculadaId: novaDividaId,
-                valorContadoComoResultadoOpcoes: sobra
-              });
-            }
+            encerrarOperacaoComVinculo({
+              opId: vincularModal.op!.id,
+              precoEncerramento,
+              dataEncerramento,
+              tipoVinculo,
+              dividaId,
+              valorVinculado,
+              novaDivida,
+              resultadoProjetado: vincularModal.resultadoProjetado,
+              ativo: vincularModal.op!.ativo
+            });
 
             setVincularModal({ op: null, open: false, dataEncerramento: '', precoEncerramento: 0, resultadoProjetado: 0 });
           }}
@@ -485,10 +534,25 @@ export default function OperacoesAbertas() {
       {editarModal.open && editarModal.op && (
         <ModalEditarOperacao 
           op={editarModal.op}
+          gruposExistentes={gruposCadastrados}
           onClose={() => setEditarModal({ op: null, open: false })}
           onConfirm={(campos) => {
             editarOperacao(editarModal.op!.id, campos);
             setEditarModal({ op: null, open: false });
+          }}
+        />
+      )}
+
+      {agruparModal.open && agruparModal.op && (
+        <ModalAgruparEstrategia
+          isOpen={agruparModal.open}
+          op={agruparModal.op}
+          todasOperacoes={operacoes}
+          gruposExistentes={gruposCadastrados}
+          onClose={() => setAgruparModal({ op: null, open: false })}
+          onSalvar={(opIds, grupo) => {
+            atribuirGrupoEstrategia(opIds, grupo);
+            setAgruparModal({ op: null, open: false });
           }}
         />
       )}
@@ -528,6 +592,8 @@ interface OperacaoCardProps {
   onAumentar: () => void;
   onEditar: () => void;
   onExcluir: () => void;
+  onAgrupar: () => void;
+  onFiltrarEstrategia?: (grupo: string) => void;
   onEditEvent: (evt: EventoOperacao) => void;
   onDeleteEvent: (evtId: string) => void;
   isExpanded: boolean;
@@ -537,11 +603,13 @@ interface OperacaoCardProps {
 function OperacaoCard({ 
   op, 
   onEncerrar, 
-  onDividir,
+  onDividir, 
   onRolar, 
   onAumentar, 
   onEditar, 
   onExcluir, 
+  onAgrupar,
+  onFiltrarEstrategia,
   onEditEvent, 
   onDeleteEvent, 
   isExpanded, 
@@ -558,7 +626,7 @@ function OperacaoCard({
       <div className="p-4 flex-1">
         <div className="flex justify-between items-start mb-3">
           <div>
-            <h3 className="text-lg font-bold flex items-center gap-2 text-slate-800 dark:text-slate-100">
+            <h3 className="text-lg font-bold flex items-center gap-2 text-slate-800 dark:text-slate-100 flex-wrap">
               {op.ativo}
               <span className={`px-1.5 py-0.5 rounded-sm text-[9px] font-bold ${op.direcaoInicial === 'V' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'}`}>
                 {op.direcaoInicial === 'V' ? 'VENDA' : 'COMPRA'}
@@ -567,9 +635,32 @@ function OperacaoCard({
                 {op.tipoOpcao}
               </span>
             </h3>
+            {op.grupoEstrategia && (
+              <div className="mt-1.5">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onFiltrarEstrategia?.(op.grupoEstrategia!);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:text-indigo-300 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800/80 transition-colors cursor-pointer shadow-2xs"
+                  title={`Filtrar por esta estratégia: ${op.grupoEstrategia}`}
+                >
+                  <Layers className="w-3 h-3 text-indigo-500" />
+                  <span>{op.grupoEstrategia}</span>
+                </button>
+              </div>
+            )}
           </div>
           
           <div className="flex items-center gap-1.5">
+            <button 
+              onClick={onAgrupar}
+              title={op.grupoEstrategia ? `Gerenciar estratégia (${op.grupoEstrategia})` : "Agrupar em estratégia"}
+              className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-1 cursor-pointer"
+            >
+              <Layers className="w-3.5 h-3.5" />
+            </button>
             <button 
               onClick={onEditar}
               title="Editar operação"
@@ -731,7 +822,9 @@ function ModalEncerrar({
   const [preco, setPreco] = useState('');
   const [data, setData] = useState(new Date().toISOString().split('T')[0]);
 
-  const p = parseFloat(preco) || 0;
+  const parsedPreco = parseFloat(preco.replace(',', '.'));
+  const isPrecoValido = preco.trim() !== '' && !isNaN(parsedPreco) && parsedPreco >= 0;
+  const p = isPrecoValido ? parsedPreco : 0;
   const isVenda = op.direcaoInicial === 'V';
   
   let resultadoProjetado = 0;
@@ -740,6 +833,10 @@ function ModalEncerrar({
   } else {
     resultadoProjetado = op.premioLiquidoAcumulado + (op.quantidadeAtual * p);
   }
+
+  const temResultadoNaoZero = Math.abs(resultadoProjetado) > 0.001;
+  const podeVincular = isPrecoValido && !!data && temResultadoNaoZero;
+  const podeEncerrar = isPrecoValido && !!data;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -754,7 +851,7 @@ function ModalEncerrar({
         <div className="p-4 space-y-4">
           <div>
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Data do Encerramento
+              Data do Encerramento *
             </label>
             <input 
               type="date" required value={data} onChange={(e) => setData(e.target.value)}
@@ -762,13 +859,33 @@ function ModalEncerrar({
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Preço de {isVenda ? 'Recompra' : 'Venda'} (R$)
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
+                Preço de {isVenda ? 'Recompra' : 'Venda'} (R$) *
+              </label>
+              <button
+                type="button"
+                onClick={() => setPreco('0')}
+                className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+              >
+                Virou Pó (R$ 0,00)
+              </button>
+            </div>
             <input 
-              type="number" step="0.01" min="0" required value={preco} onChange={(e) => setPreco(e.target.value)}
+              type="number" 
+              step="0.01" 
+              min="0" 
+              required 
+              placeholder="0,00"
+              value={preco} 
+              onChange={(e) => setPreco(e.target.value)}
               className="w-full rounded-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
             />
+            {preco.trim() !== '' && (!isPrecoValido) && (
+              <p className="text-[10px] text-rose-500 mt-1">
+                Informe um valor numérico válido maior ou igual a zero.
+              </p>
+            )}
           </div>
 
           <div className="bg-slate-50 dark:bg-slate-800/40 p-3.5 rounded mt-4 border border-slate-200 dark:border-slate-700">
@@ -786,17 +903,19 @@ function ModalEncerrar({
           
           <button
             type="button"
-            onClick={() => p > 0 && onVincularDivida(p, data, resultadoProjetado)}
-            disabled={p <= 0}
-            className="flex-1 py-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-800/60 text-indigo-700 dark:text-indigo-300 disabled:opacity-50 font-semibold rounded-sm text-xs transition-colors shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+            onClick={() => podeVincular && onVincularDivida(p, data, resultadoProjetado)}
+            disabled={!podeVincular}
+            title={!isPrecoValido ? "Informe um preço válido antes de vincular" : (!temResultadoNaoZero ? "Resultado zero não possui valor para vincular à dívida" : "Vincular à Dívida")}
+            className="flex-1 py-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-800/60 text-indigo-700 dark:text-indigo-300 disabled:opacity-50 disabled:cursor-not-allowed font-semibold rounded-sm text-xs transition-colors shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
           >
             <Link2 className="w-3.5 h-3.5" />
             Vincular à Dívida
           </button>
 
           <button 
-            onClick={() => p > 0 && onConfirm(p, data)} 
-            disabled={p <= 0}
+            type="button"
+            onClick={() => podeEncerrar && onConfirm(p, data)} 
+            disabled={!podeEncerrar}
             className="flex-1 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-sm text-xs font-semibold transition-colors shadow-sm cursor-pointer"
           >
             Confirmar Encerramento
@@ -945,6 +1064,124 @@ function ModalRolar({ op, onClose, onConfirm }: { op: Operacao, onClose: () => v
           >
             Confirmar Rolagem
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OperacaoEncerradaCard({
+  op,
+  onEditar,
+  onExcluir,
+  onAgrupar,
+  onFiltrarEstrategia,
+  dividas
+}: {
+  key?: any;
+  op: Operacao;
+  onEditar: () => void;
+  onExcluir: () => void;
+  onAgrupar: () => void;
+  onFiltrarEstrategia?: (grupo: string) => void;
+  dividas: Divida[];
+}) {
+  const dividaVinculada = op.dividaVinculadaId ? dividas.find(d => d.id === op.dividaVinculadaId) : null;
+  const temVinculo = op.valorVinculadoDivida !== null && op.valorVinculadoDivida !== undefined && op.valorVinculadoDivida !== 0;
+  const valorVinculadoAbs = Math.abs(op.valorVinculadoDivida || 0);
+  const isAmortizacao = (op.valorVinculadoDivida || 0) > 0;
+
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-md card-shadow border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden opacity-95 hover:border-slate-300 dark:hover:border-slate-600 transition-all">
+      <div className="p-4 flex-1">
+        <div className="flex justify-between items-start mb-2.5">
+          <div>
+            <h3 className="text-base font-bold flex items-center gap-1.5 text-slate-800 dark:text-slate-100 flex-wrap">
+              {op.ativo}
+              <span className={`px-1.5 py-0.5 rounded-sm text-[9px] font-bold ${op.direcaoInicial === 'V' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'}`}>
+                {op.direcaoInicial === 'V' ? 'VENDA' : 'COMPRA'}
+              </span>
+              <span className="px-1.5 py-0.5 rounded-sm text-[9px] font-bold bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300">
+                {op.tipoOpcao}
+              </span>
+            </h3>
+            {op.grupoEstrategia && (
+              <div className="mt-1">
+                <button
+                  type="button"
+                  onClick={() => onFiltrarEstrategia?.(op.grupoEstrategia!)}
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/60"
+                >
+                  <Layers className="w-3 h-3 text-indigo-500" />
+                  <span>{op.grupoEstrategia}</span>
+                </button>
+              </div>
+            )}
+          </div>
+          
+          <div className="flex items-center gap-1">
+            <span className="px-2 py-0.5 rounded-sm text-[9px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+              ENCERRADA
+            </span>
+            <button 
+              onClick={onAgrupar} 
+              title="Gerenciar estratégia" 
+              className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1 cursor-pointer"
+            >
+              <Layers className="w-3.5 h-3.5" />
+            </button>
+            <button 
+              onClick={onEditar} 
+              title="Editar operação" 
+              className="text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 p-1 cursor-pointer"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            <button 
+              onClick={onExcluir} 
+              title="Excluir operação permanentemente" 
+              className="text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 p-1 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+          <div>
+            <span className="text-[9px] text-slate-400 uppercase font-semibold block">Quantidade</span>
+            <p className="font-mono font-bold text-slate-700 dark:text-slate-200">{op.quantidadeAtual}</p>
+          </div>
+          <div>
+            <span className="text-[9px] text-slate-400 uppercase font-semibold block">Data Encerramento</span>
+            <p className="font-bold text-slate-700 dark:text-slate-200">{formatDate(op.dataEncerramento!)}</p>
+          </div>
+          <div>
+            <span className="text-[9px] text-slate-400 uppercase font-semibold block">Preço Encerramento</span>
+            <p className="font-mono font-bold text-slate-700 dark:text-slate-200">{formatCurrency(op.precoEncerramento ?? 0)}</p>
+          </div>
+          <div>
+            <span className="text-[9px] text-slate-400 uppercase font-semibold block">Strike</span>
+            <p className="font-mono font-bold text-slate-700 dark:text-slate-200">{formatCurrency(op.strikeAtual)}</p>
+          </div>
+        </div>
+
+        <div className="pt-2.5 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+          <div>
+            <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Resultado Final</p>
+            <p className={`text-base font-bold font-mono ${(op.resultadoFinal ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+              {formatCurrency(op.resultadoFinal ?? 0)}
+            </p>
+          </div>
+          {temVinculo && (
+            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border ${
+              isAmortizacao
+                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+            }`}>
+              {isAmortizacao ? `💰 ${formatCurrency(valorVinculadoAbs)} amortizado` : `📌 ${formatCurrency(valorVinculadoAbs)} dívida`}
+            </span>
+          )}
         </div>
       </div>
     </div>

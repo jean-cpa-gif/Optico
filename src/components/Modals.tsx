@@ -391,9 +391,10 @@ interface ModalEditarOperacaoProps {
   op: Operacao;
   onClose: () => void;
   onConfirm: (campos: Partial<Operacao>) => void;
+  gruposExistentes?: string[];
 }
 
-export function ModalEditarOperacao({ op, onClose, onConfirm }: ModalEditarOperacaoProps) {
+export function ModalEditarOperacao({ op, onClose, onConfirm, gruposExistentes = [] }: ModalEditarOperacaoProps) {
   const [ativo, setAtivo] = useState(op.ativo);
   const [tipoOpcao, setTipoOpcao] = useState(op.tipoOpcao);
   const [direcaoInicial, setDirecaoInicial] = useState(op.direcaoInicial);
@@ -403,6 +404,7 @@ export function ModalEditarOperacao({ op, onClose, onConfirm }: ModalEditarOpera
   const [dataAbertura, setDataAbertura] = useState(op.dataAbertura);
   const [vencimentoAtual, setVencimentoAtual] = useState(op.vencimentoAtual);
   const [status, setStatus] = useState(op.status);
+  const [grupoEstrategia, setGrupoEstrategia] = useState(op.grupoEstrategia || '');
   
   // closed operation parameters
   const [precoEncerramento, setPrecoEncerramento] = useState(op.precoEncerramento?.toString() || '');
@@ -420,6 +422,7 @@ export function ModalEditarOperacao({ op, onClose, onConfirm }: ModalEditarOpera
       dataAbertura,
       vencimentoAtual,
       status,
+      grupoEstrategia: grupoEstrategia.trim() ? grupoEstrategia.trim() : null,
     };
 
     if (status === 'encerrada') {
@@ -525,6 +528,23 @@ export function ModalEditarOperacao({ op, onClose, onConfirm }: ModalEditarOpera
                   type="date" required value={vencimentoAtual} onChange={(e) => setVencimentoAtual(e.target.value)}
                   className="w-full rounded-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1 text-sm"
                 />
+              </div>
+
+              <div className="col-span-2">
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Estratégia / Grupo (opcional)</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: Trava de Alta PETR4, Straddle BOVA11..." 
+                  list="lista-grupos-editar"
+                  value={grupoEstrategia} 
+                  onChange={(e) => setGrupoEstrategia(e.target.value)}
+                  className="w-full rounded-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1 text-sm"
+                />
+                <datalist id="lista-grupos-editar">
+                  {gruposExistentes.map(g => (
+                    <option key={g} value={g} />
+                  ))}
+                </datalist>
               </div>
             </div>
 
