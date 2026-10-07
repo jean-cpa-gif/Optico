@@ -23,7 +23,7 @@ export default function NovaOperacao() {
     if (!ativo || !strikeInicial || !quantidadeInicial || !precoMedioOriginal || !dataAbertura || !vencimentoAtual) return;
 
     addOperacao({
-      ativo: ativo.toUpperCase(),
+      ativo: ativo.trim().toUpperCase(),
       tipoOpcao,
       direcaoInicial,
       strikeInicial: parseFloat(strikeInicial),
@@ -66,14 +66,14 @@ export default function NovaOperacao() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Ativo (Ticker)</label>
+            <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Ativo (Ticker da Opção)</label>
             <input
               type="text"
               required
-              placeholder="Ex: PETR4"
+              placeholder="Ex: PETR4, VALE3 ou BEEFN120"
               value={ativo}
-              onChange={(e) => setAtivo(e.target.value)}
-              className="w-full rounded-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
+              onChange={(e) => setAtivo(e.target.value.toUpperCase())}
+              className="w-full rounded-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase font-mono"
             />
           </div>
 

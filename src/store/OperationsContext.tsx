@@ -291,6 +291,7 @@ export function OperationsProvider({ children }: { children: React.ReactNode }) 
       : -(opData.quantidadeInicial * opData.precoMedioOriginal);
 
     const opId = uuidv4();
+    const ativoBaseNormalizado = opData.ativoBase?.trim() ? opData.ativoBase.trim().toUpperCase() : null;
     const aberturaEvento: EventoOperacao = {
       id: uuidv4(),
       tipo: 'abertura',
@@ -304,6 +305,7 @@ export function OperationsProvider({ children }: { children: React.ReactNode }) 
     const novaOperacao: Operacao = {
       id: opId,
       ...opData,
+      ativoBase: ativoBaseNormalizado,
       status: 'aberta',
       premioLiquidoAcumulado,
       quantidadeAtual: opData.quantidadeInicial,

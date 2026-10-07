@@ -70,6 +70,7 @@ export interface Operacao {
   dividaVinculadaId?: string | null;
   valorContadoComoResultadoOpcoes?: number | null;
   grupoEstrategia?: string | null;
+  ativoBase?: string | null;
 }
 
 export type StatusDivida = 'aberta' | 'quitada';

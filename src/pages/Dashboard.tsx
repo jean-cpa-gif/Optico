@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useOperations } from '@/store/OperationsContext';
 import { useDividas } from '@/store/DividasContext';
 import { formatCurrency } from '@/lib/utils';
@@ -6,7 +6,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { useTheme } from '@/components/ThemeProvider';
 import { useNavigate } from 'react-router-dom';
 import VencimentoAlerta from '@/components/VencimentoAlerta';
-import { TrendingUp, TrendingDown, Wallet, Scale, ChevronDown, ChevronUp, Layers, CheckCircle2, ArrowRight } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, Scale, ChevronDown, ChevronUp, Layers, CheckCircle2, ArrowRight, Search, X, RotateCcw } from 'lucide-react';
 
 export default function Dashboard() {
   const { operacoes } = useOperations();
@@ -16,6 +16,24 @@ export default function Dashboard() {
 
   // Estados para expansão dos 3 cards de topo
   const [expandedCard, setExpandedCard] = useState<'opcoes' | 'dividas' | 'liquido' | null>(null);
+
+  // Estados da busca e filtros de análise por ativo no gráfico
+  const [inputBuscaAtivo, setInputBuscaAtivo] = useState('');
+  const [termoBuscaAtivo, setTermoBuscaAtivo] = useState('');
+  const [filtroTipoOpcao, setFiltroTipoOpcao] = useState<'todos' | 'PUT' | 'CALL'>('todos');
+  const [filtroDirecao, setFiltroDirecao] = useState<'todas' | 'V' | 'C'>('todas');
+  const [historicoBuscas, setHistoricoBuscas] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('dashboard-busca-ativos-historico');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed.slice(0, 10);
+      }
+    } catch (e) {
+      console.error('Erro ao ler histórico de busca', e);
+    }
+    return [];
+  });
 
   const abertas = operacoes.filter(op => op.status === 'aberta');
   const encerradas = operacoes.filter(op => op.status === 'encerrada');
@@ -79,7 +97,71 @@ export default function Dashboard() {
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([mes, valor]): { mes: string; valor: number } => ({ mes, valor: valor as number }));
 
-  const resultPorAtivo = encerradas.reduce((acc, op) => {
+  // Funções para controle da busca e histórico
+  const dispararBusca = (termo: string) => {
+    const termoLimpo = termo.trim();
+    setTermoBuscaAtivo(termoLimpo);
+    setInputBuscaAtivo(termoLimpo);
+
+    if (termoLimpo) {
+      setHistoricoBuscas(prev => {
+        const normalizado = termoLimpo.toUpperCase();
+        const filtrado = prev.filter(item => item.toUpperCase() !== normalizado);
+        const novo = [termoLimpo.toUpperCase(), ...filtrado].slice(0, 10);
+        try {
+          localStorage.setItem('dashboard-busca-ativos-historico', JSON.stringify(novo));
+        } catch (e) {}
+        return novo;
+      });
+    }
+  };
+
+  const excluirSugestao = (e: React.MouseEvent, itemParaExcluir: string) => {
+    e.stopPropagation();
+    setHistoricoBuscas(prev => {
+      const novo = prev.filter(item => item.toUpperCase() !== itemParaExcluir.toUpperCase());
+      try {
+        localStorage.setItem('dashboard-busca-ativos-historico', JSON.stringify(novo));
+      } catch (e) {}
+      return novo;
+    });
+  };
+
+  const limparHistorico = () => {
+    setHistoricoBuscas([]);
+    try {
+      localStorage.removeItem('dashboard-busca-ativos-historico');
+    } catch (e) {}
+  };
+
+  const limparFiltrosBusca = () => {
+    setTermoBuscaAtivo('');
+    setInputBuscaAtivo('');
+    setFiltroTipoOpcao('todos');
+    setFiltroDirecao('todas');
+  };
+
+  // Operações filtradas na área do gráfico de Desempenho por Ativo:
+  // Usa o nome da opção op.ativo com busca case-insensitive e filtros combináveis de PUT/CALL e Compra/Venda
+  const operacoesGraficoAtivo = encerradas.filter(op => {
+    if (termoBuscaAtivo) {
+      if (!op.ativo.toLowerCase().includes(termoBuscaAtivo.toLowerCase())) {
+        return false;
+      }
+    }
+    if (filtroTipoOpcao !== 'todos') {
+      if (op.tipoOpcao !== filtroTipoOpcao) return false;
+    }
+    if (filtroDirecao !== 'todas') {
+      if (op.direcaoInicial !== filtroDirecao) return false;
+    }
+    return true;
+  });
+
+  const resultadoSomadoBusca = operacoesGraficoAtivo.reduce((acc, op) => acc + (op.resultadoFinal ?? 0), 0);
+  const qtdOperacoesBusca = operacoesGraficoAtivo.length;
+
+  const resultPorAtivo = operacoesGraficoAtivo.reduce((acc, op) => {
     acc[op.ativo] = (acc[op.ativo] || 0) + (op.resultadoFinal ?? 0);
     return acc;
   }, {} as Record<string, number>);
@@ -352,11 +434,177 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-800 p-4 rounded-md border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">Desempenho por Ativo (Resultado Real)</h3>
-            <span className="text-[10px] text-slate-400 font-medium">resultadoFinal integral</span>
+        <div className="bg-white dark:bg-slate-800 p-4 rounded-md border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col space-y-3">
+          {/* Cabeçalho do Card com Título e Indicadores Somados */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-700/60">
+            <div>
+              <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">Desempenho por Ativo (Resultado Real)</h3>
+              <span className="text-[10px] text-slate-400 font-medium">resultadoFinal integral das operações encerradas</span>
+            </div>
+
+            {/* Resultado Somado e Quantidade Filtrada */}
+            <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900/60 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 self-start sm:self-auto">
+              <div>
+                <span className="text-[9px] uppercase font-semibold text-slate-400 block">Resultado Somado</span>
+                <span className={`text-sm font-bold font-mono tracking-tight block ${
+                  resultadoSomadoBusca >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                }`}>
+                  {formatCurrency(resultadoSomadoBusca)}
+                </span>
+              </div>
+              <div className="h-6 w-px bg-slate-200 dark:bg-slate-700"></div>
+              <div>
+                <span className="text-[9px] uppercase font-semibold text-slate-400 block">Encerradas</span>
+                <span className="text-sm font-bold font-mono text-slate-700 dark:text-slate-300 block">
+                  {qtdOperacoesBusca} <span className="text-[10px] font-normal text-slate-400">op.</span>
+                </span>
+              </div>
+            </div>
           </div>
+
+          {/* Campo de Busca e Filtros Combináveis */}
+          <div className="space-y-2">
+            <div className="flex flex-col sm:flex-row gap-2">
+              {/* Formulário de Busca por Ticker */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  dispararBusca(inputBuscaAtivo);
+                }}
+                className="flex-1 flex items-center relative"
+              >
+                <input
+                  type="text"
+                  value={inputBuscaAtivo}
+                  onChange={(e) => setInputBuscaAtivo(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      dispararBusca(inputBuscaAtivo);
+                    }
+                  }}
+                  placeholder="Buscar ativo (ex: BEEF, PETR, VALE)... [Enter ou lupa]"
+                  className="w-full pl-3 pr-20 py-1.5 text-xs rounded-md bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                />
+                <div className="absolute right-1 flex items-center gap-1">
+                  {inputBuscaAtivo && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInputBuscaAtivo('');
+                        if (termoBuscaAtivo) dispararBusca('');
+                      }}
+                      className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                      title="Limpar texto"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                    title="Pesquisar (Enter ou clique)"
+                  >
+                    <Search className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Buscar</span>
+                  </button>
+                </div>
+              </form>
+
+              {/* Filtros Combináveis PUT/CALL e Compra/Venda */}
+              <div className="flex items-center gap-2 shrink-0">
+                <select
+                  value={filtroTipoOpcao}
+                  onChange={(e) => setFiltroTipoOpcao(e.target.value as 'todos' | 'PUT' | 'CALL')}
+                  className="text-xs py-1.5 px-2 rounded-md bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium cursor-pointer"
+                  title="Filtrar por tipo de opção"
+                >
+                  <option value="todos">Tipo: Todos</option>
+                  <option value="PUT">Apenas PUT</option>
+                  <option value="CALL">Apenas CALL</option>
+                </select>
+
+                <select
+                  value={filtroDirecao}
+                  onChange={(e) => setFiltroDirecao(e.target.value as 'todas' | 'V' | 'C')}
+                  className="text-xs py-1.5 px-2 rounded-md bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium cursor-pointer"
+                  title="Filtrar por direção inicial"
+                >
+                  <option value="todas">Direção: Todas</option>
+                  <option value="V">Venda (V)</option>
+                  <option value="C">Compra (C)</option>
+                </select>
+
+                {(termoBuscaAtivo || filtroTipoOpcao !== 'todos' || filtroDirecao !== 'todas') && (
+                  <button
+                    type="button"
+                    onClick={limparFiltrosBusca}
+                    className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                    title="Limpar filtros da análise"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Aviso de filtro de busca ativo */}
+            {termoBuscaAtivo && (
+              <div className="flex items-center justify-between text-xs px-2.5 py-1 bg-blue-50/70 dark:bg-blue-950/40 rounded border border-blue-200/80 dark:border-blue-900/50 text-blue-700 dark:text-blue-300">
+                <span>
+                  Filtrando por: <strong className="font-mono uppercase">{termoBuscaAtivo}</strong> ({qtdOperacoesBusca} encontrada{qtdOperacoesBusca === 1 ? '' : 's'})
+                </span>
+                <button
+                  type="button"
+                  onClick={() => dispararBusca('')}
+                  className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                >
+                  Remover filtro
+                </button>
+              </div>
+            )}
+
+            {/* Histórico das últimas 10 pesquisas únicas como sugestões clicáveis */}
+            {historicoBuscas.length > 0 && (
+              <div className="flex items-center flex-wrap gap-1.5 pt-0.5">
+                <span className="text-[10px] uppercase font-semibold text-slate-400 mr-0.5">
+                  Recentes:
+                </span>
+                {historicoBuscas.map(sugestao => (
+                  <span
+                    key={sugestao}
+                    onClick={() => dispararBusca(sugestao)}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono cursor-pointer transition-colors border select-none ${
+                      termoBuscaAtivo.toUpperCase() === sugestao.toUpperCase()
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-2xs font-bold'
+                        : 'bg-slate-100 dark:bg-slate-700/60 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-600 hover:bg-slate-200 dark:hover:bg-slate-700'
+                    }`}
+                    title={`Filtrar por ${sugestao}`}
+                  >
+                    <span>{sugestao}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => excluirSugestao(e, sugestao)}
+                      className="text-slate-400 hover:text-rose-600 dark:hover:text-rose-300 p-0.5 rounded-full"
+                      title="Excluir do histórico"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </span>
+                ))}
+                <button
+                  type="button"
+                  onClick={limparHistorico}
+                  className="text-[10px] text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors ml-1 cursor-pointer underline"
+                  title="Apagar todo o histórico de buscas salvas"
+                >
+                  Limpar histórico
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Gráfico das operações filtradas */}
           <div className="h-56">
             {dataGraficoAtivo.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -381,11 +629,16 @@ export default function Dashboard() {
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-full flex items-center justify-center text-gray-400">Sem dados suficientes</div>
+              <div className="h-full flex flex-col items-center justify-center text-gray-400 text-xs">
+                <span>Nenhuma operação encerrada encontrada</span>
+                {(termoBuscaAtivo || filtroTipoOpcao !== 'todos' || filtroDirecao !== 'todas') && (
+                  <span className="text-[10px] text-slate-400 mt-1">Tente ajustar a busca ou os filtros acima</span>
+                )}
+              </div>
             )}
             {dataGraficoAtivo.length > 0 && (
-              <div className="flex flex-wrap gap-2 justify-center mt-4">
-                {dataGraficoAtivo.slice(0, 6).map((entry, index) => (
+              <div className="flex flex-wrap gap-2 justify-center mt-3">
+                {dataGraficoAtivo.slice(0, 8).map((entry, index) => (
                   <div key={entry.name} className="flex items-center text-[10px] uppercase font-semibold text-slate-500">
                     <span className="w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: COLORS[index % COLORS.length] }}></span>
                     <span>{entry.name}</span>

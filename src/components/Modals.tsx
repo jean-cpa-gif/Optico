@@ -413,7 +413,7 @@ export function ModalEditarOperacao({ op, onClose, onConfirm, gruposExistentes =
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const campos: Partial<Operacao> = {
-      ativo: ativo.toUpperCase(),
+      ativo: ativo.trim().toUpperCase(),
       tipoOpcao,
       direcaoInicial,
       strikeInicial: parseFloat(strikeInicial) || 0,
@@ -452,8 +452,8 @@ export function ModalEditarOperacao({ op, onClose, onConfirm, gruposExistentes =
               <div>
                 <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Ativo (Ticker)</label>
                 <input 
-                  type="text" required value={ativo} onChange={(e) => setAtivo(e.target.value)}
-                  className="w-full rounded-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1 text-sm uppercase font-semibold"
+                  type="text" required value={ativo} onChange={(e) => setAtivo(e.target.value.toUpperCase())}
+                  className="w-full rounded-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1 text-sm uppercase font-semibold font-mono"
                 />
               </div>
 

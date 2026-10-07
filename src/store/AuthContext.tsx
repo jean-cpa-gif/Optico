@@ -140,14 +140,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    await setDoc(docRef, {
+    // O Firestore rejeita objetos com campos 'undefined'.
+    // Sanitizamos recursivamente todos os dados para remover valores 'undefined'.
+    const payloadBruto = {
       operacoes: operacoesLocais,
       dividas: dividasSalvar,
       updatedAt: nowIso,
       totalOperacoes: operacoesLocais.length,
       totalDividas: dividasSalvar.length,
       userEmail: user.email || 'Anônimo'
-    }, { merge: true });
+    };
+
+    const payloadSanitizado = JSON.parse(
+      JSON.stringify(payloadBruto, (_key, val) => (val === undefined ? null : val))
+    );
+
+    await setDoc(docRef, payloadSanitizado, { merge: true });
 
     setCloudBackupInfo({
       lastBackupDate: nowIso,
