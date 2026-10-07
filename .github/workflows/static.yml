@@ -1,7 +1,7 @@
 name: Publicar app no GitHub Pages
 
 on:
-push:
+  push:
     branches: ["main"]
   workflow_dispatch:
 
@@ -22,7 +22,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
-      - name: Baixar código
+      - name: Baixar codigo
         uses: actions/checkout@v4
 
       - name: Preparar Node
@@ -31,8 +31,8 @@ jobs:
           node-version: "22"
           cache: npm
 
-      - name: Instalar dependências
-        run: npm ci
+      - name: Instalar dependencias
+        run: npm install --no-audit --no-fund
 
       - name: Compilar app
         run: npm run build -- --base=/Optico/
