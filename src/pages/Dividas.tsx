@@ -87,10 +87,10 @@ export default function Dividas() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
-            Controle de Dívidas & Estruturas Travadas
+            Recuperação de Valores & Estruturas
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Abata dívidas e estruturas aos poucos utilizando prêmios obtidos nas suas operações de opções, sem misturar com as estatísticas de trades.
+            Recupere valores e estruturas aos poucos utilizando prêmios obtidos nas suas operações de opções, acompanhando sua evolução de forma clara e motivadora.
           </p>
         </div>
 
@@ -99,11 +99,11 @@ export default function Dividas() {
           className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-sm transition-colors cursor-pointer shrink-0"
         >
           <Plus className="w-4 h-4" />
-          Nova Dívida
+          Novo Valor a Recuperar
         </button>
       </div>
 
-      {/* 6. Resumo no topo da tela "Dívidas" */}
+      {/* 6. Resumo no topo da tela "Recuperar" */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Total Saldo Ativo */}
         <div className="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 card-shadow flex items-center space-x-4">
@@ -112,13 +112,13 @@ export default function Dividas() {
           </div>
           <div>
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
-              Saldo Devedor Ativo
+              Total a Recuperar
             </span>
             <span className="text-2xl font-bold font-mono text-rose-600 dark:text-rose-400 tracking-tight block mt-0.5">
               {formatCurrency(totalSaldoAtivo)}
             </span>
             <span className="text-[11px] text-slate-400">
-              {dividasAbertas.length} {dividasAbertas.length === 1 ? 'dívida ativa' : 'dívidas ativas'}
+              {dividasAbertas.length} {dividasAbertas.length === 1 ? 'meta ativa' : 'metas ativas'}
             </span>
           </div>
         </div>
@@ -130,13 +130,13 @@ export default function Dividas() {
           </div>
           <div>
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
-              Total Já Amortizado
+              Total Já Recuperado
             </span>
             <span className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 tracking-tight block mt-0.5">
               {formatCurrency(totalGeralAmortizado)}
             </span>
             <span className="text-[11px] text-slate-400">
-              Histórico acumulado de abatimentos
+              Histórico acumulado de recuperação
             </span>
           </div>
         </div>
@@ -148,13 +148,13 @@ export default function Dividas() {
           </div>
           <div>
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
-              Dívidas Quitadas
+              Totalmente Recuperados
             </span>
             <span className="text-2xl font-bold font-mono text-blue-600 dark:text-blue-400 tracking-tight block mt-0.5">
               {totalQuitadas}
             </span>
             <span className="text-[11px] text-slate-400">
-              {totalQuitadas === 1 ? 'estrutura 100% quitada 🎉' : 'estruturas 100% quitadas 🎉'}
+              {totalQuitadas === 1 ? 'estrutura 100% recuperada 🎉' : 'estruturas 100% recuperadas 🎉'}
             </span>
           </div>
         </div>
@@ -165,7 +165,7 @@ export default function Dividas() {
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
             <Layers className="w-4 h-4 text-blue-500" />
-            Dívidas em Andamento ({dividasAbertas.length})
+            Em Recuperação ({dividasAbertas.length})
           </h3>
         </div>
 
@@ -176,10 +176,10 @@ export default function Dividas() {
             </div>
             <div>
               <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
-                Nenhuma dívida ativa no momento
+                Nenhum valor em recuperação no momento
               </p>
               <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
-                Cadastre estruturas travadas, empréstimos ou posições para acompanhar o pagamento gradual através de prêmios de opções.
+                Cadastre estruturas travadas, posições ou valores que deseja recuperar através de prêmios obtidos em suas operações.
               </p>
             </div>
             <button
@@ -187,7 +187,7 @@ export default function Dividas() {
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
-              Cadastrar Primeira Dívida
+              Cadastrar Primeiro Valor a Recuperar
             </button>
           </div>
         ) : (
@@ -210,13 +210,13 @@ export default function Dividas() {
         )}
       </div>
 
-      {/* Lista de Dívidas Quitadas (Seção Separada no Fim da Lista) */}
+      {/* Lista de Valores 100% Recuperados (Seção Separada no Fim da Lista) */}
       {dividasQuitadas.length > 0 && (
         <div className="space-y-4 pt-4 border-t border-slate-200 dark:border-slate-800">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4" />
-              Dívidas Quitadas ({dividasQuitadas.length})
+              Totalmente Recuperados ({dividasQuitadas.length})
             </h3>
           </div>
 
@@ -271,10 +271,10 @@ export default function Dividas() {
 
             <div>
               <h4 className="text-base font-bold text-slate-900 dark:text-white">
-                Dívida Paga! 🎉
+                Valor 100% Recuperado! 🎉
               </h4>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                O saldo da dívida <strong>"{quitacaoSugerida.dividaNome}"</strong> chegou a zero (ou menos). Deseja marcar esta dívida como <strong>Quitada</strong> e movê-la para a seção de quitadas?
+                O saldo da meta <strong>"{quitacaoSugerida.dividaNome}"</strong> chegou a zero! Deseja marcar esta meta como <strong>Totalmente Recuperada</strong> e comemorar essa conquista?
               </p>
             </div>
 
@@ -284,7 +284,7 @@ export default function Dividas() {
                 onClick={() => setQuitacaoSugerida(null)}
                 className="px-3.5 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer"
               >
-                Manter Aberta
+                Manter Ativa
               </button>
               <button
                 type="button"
@@ -295,7 +295,7 @@ export default function Dividas() {
                 className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm cursor-pointer flex items-center gap-1.5"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                Sim, Marcar como Quitada!
+                Sim, Meta Concluída!
               </button>
             </div>
           </div>

@@ -65,10 +65,10 @@ export function ModalNovaDivida({ isOpen, onClose, onConfirm }: ModalNovaDividaP
         <div className="flex justify-between items-center p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40">
           <div>
             <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
-              Nova Dívida / Estrutura Travada
+              Novo Valor a Recuperar
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Cadastre a dívida para acompanhar as amortizações com prêmios de opções
+              Cadastre a estrutura ou valor para acompanhar a recuperação gradual com prêmios de opções
             </p>
           </div>
           <button 
@@ -89,12 +89,12 @@ export function ModalNovaDivida({ isOpen, onClose, onConfirm }: ModalNovaDividaP
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Nome da Dívida / Estrutura *
+              Nome da Meta / Valor a Recuperar *
             </label>
             <input
               type="text"
               required
-              placeholder="Ex: Trava Movida/Ambev, Empréstimo Pessoal, etc."
+              placeholder="Ex: Trava PETR4/VALE, Posição Travada, Empréstimo..."
               value={nome}
               onChange={(e) => setNome(e.target.value)}
               className="w-full rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -117,7 +117,7 @@ export function ModalNovaDivida({ isOpen, onClose, onConfirm }: ModalNovaDividaP
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Saldo Inicial (R$) *
+                Valor Inicial a Recuperar (R$) *
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-semibold">R$</span>
@@ -182,7 +182,7 @@ export function ModalNovaDivida({ isOpen, onClose, onConfirm }: ModalNovaDividaP
               type="submit"
               className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-colors cursor-pointer"
             >
-              Cadastrar Dívida
+              Cadastrar Valor a Recuperar
             </button>
           </div>
         </form>

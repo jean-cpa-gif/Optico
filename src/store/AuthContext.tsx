@@ -120,6 +120,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setCloudBackupInfo(null);
   };
 
+function removeUndefinedDeep<T>(val: T): T {
+  if (val === undefined) {
+    return null as any;
+  }
+  if (val === null) {
+    return null as any;
+  }
+  if (Array.isArray(val)) {
+    return val.map(item => removeUndefinedDeep(item)) as any;
+  }
+  if (typeof val === 'object' && val !== null) {
+    const cleanObj: Record<string, any> = {};
+    for (const [k, v] of Object.entries(val)) {
+      if (v !== undefined) {
+        cleanObj[k] = removeUndefinedDeep(v);
+      }
+    }
+    return cleanObj as any;
+  }
+  return val;
+}
+
   const fazerBackupNuvem = async (operacoesLocais: Operacao[], dividasLocais?: Divida[]) => {
     if (!user) {
       throw new Error('Você precisa estar logado para fazer backup na nuvem.');
@@ -151,9 +173,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       userEmail: user.email || 'Anônimo'
     };
 
-    const payloadSanitizado = JSON.parse(
-      JSON.stringify(payloadBruto, (_key, val) => (val === undefined ? null : val))
-    );
+    const payloadSanitizado = removeUndefinedDeep(payloadBruto);
 
     await setDoc(docRef, payloadSanitizado, { merge: true });
 

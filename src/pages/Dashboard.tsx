@@ -243,7 +243,7 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Card 2: Dívida em Aberto */}
+        {/* Card 2: Saldo a Recuperar */}
         <div 
           onClick={() => toggleExpand('dividas')}
           className={`bg-white dark:bg-slate-800 rounded-xl p-4 sm:p-5 border card-shadow cursor-pointer transition-all duration-150 hover:border-slate-400 dark:hover:border-slate-600 ${
@@ -257,7 +257,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-                  Dívida em Aberto
+                  Saldo a Recuperar
                 </span>
                 <span className="text-2xl font-bold font-mono tracking-tight block mt-0.5 text-rose-600 dark:text-rose-400">
                   {formatCurrency(dividaEmAberto)}
@@ -270,13 +270,13 @@ export default function Dashboard() {
           </div>
 
           <p className="text-[11px] text-slate-400 mt-2">
-            Passivo atual de estruturas travadas e dívidas em aberto.
+            Saldo atual de estruturas travadas e valores em recuperação.
           </p>
 
           {expandedCard === 'dividas' && (
             <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700/80 space-y-2 text-xs text-slate-600 dark:text-slate-300 animate-in fade-in">
               <div className="flex justify-between">
-                <span>Dívidas ativas em aberto:</span>
+                <span>Valores ativos a recuperar:</span>
                 <span className="font-bold">{dividasAbertas.length}</span>
               </div>
               {dividasAbertas.length > 0 ? (
@@ -289,7 +289,7 @@ export default function Dashboard() {
                   ))}
                 </div>
               ) : (
-                <p className="text-[11px] text-emerald-600 dark:text-emerald-400">Você não possui nenhuma dívida ativa! 🎉</p>
+                <p className="text-[11px] text-emerald-600 dark:text-emerald-400">Você não possui nenhum valor pendente a recuperar! 🎉</p>
               )}
               <button 
                 onClick={(e) => {
@@ -298,7 +298,7 @@ export default function Dashboard() {
                 }}
                 className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 pt-1"
               >
-                Gerenciar Dívidas <ArrowRight className="w-3 h-3" />
+                Ir para Recuperar <ArrowRight className="w-3 h-3" />
               </button>
             </div>
           )}

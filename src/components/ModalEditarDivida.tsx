@@ -87,10 +87,10 @@ export function ModalEditarDivida({ isOpen, divida, onClose, onConfirm }: ModalE
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
-                Editar Dívida
+                Editar Valor a Recuperar
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Altere informações ou corrija cadastros incorretos
+                Altere informações ou ajuste valores da meta de recuperação
               </p>
             </div>
           </div>
@@ -113,7 +113,7 @@ export function ModalEditarDivida({ isOpen, divida, onClose, onConfirm }: ModalE
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Nome da Dívida / Estrutura *
+              Nome da Meta / Valor a Recuperar *
             </label>
             <input
               type="text"
@@ -195,15 +195,15 @@ export function ModalEditarDivida({ isOpen, divida, onClose, onConfirm }: ModalE
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Status da Dívida
+                Status da Recuperação
               </label>
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value as 'aberta' | 'quitada')}
                 className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
               >
-                <option value="aberta">Em Aberto</option>
-                <option value="quitada">Quitada 🎉</option>
+                <option value="aberta">Em Recuperação</option>
+                <option value="quitada">100% Recuperada 🎉</option>
               </select>
             </div>
           </div>

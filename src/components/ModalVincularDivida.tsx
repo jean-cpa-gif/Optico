@@ -79,7 +79,7 @@ export function ModalVincularDivida({
 
     if (isLucro) {
       if (!selectedDividaId) {
-        setErro('Por favor, selecione uma dívida ativa para amortizar.');
+        setErro('Por favor, selecione uma meta de recuperação ativa para abater.');
         return;
       }
 
@@ -94,7 +94,7 @@ export function ModalVincularDivida({
       // Prejuízo
       if (abaPrejuizo === 'somar') {
         if (!selectedDividaId) {
-          setErro('Por favor, selecione uma dívida ativa para somar o prejuízo.');
+          setErro('Por favor, selecione uma meta ativa para somar o valor a recuperar.');
           return;
         }
 
@@ -108,7 +108,7 @@ export function ModalVincularDivida({
       } else {
         // Criar nova
         if (!novoNome.trim()) {
-          setErro('Informe um nome para a nova dívida.');
+          setErro('Informe um nome para o novo valor a recuperar.');
           return;
         }
 
@@ -152,7 +152,7 @@ export function ModalVincularDivida({
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
-                {isLucro ? 'Amortizar uma dívida existente' : 'Registrar este prejuízo como dívida'}
+                {isLucro ? 'Direcionar lucro para recuperar valor' : 'Registrar resultado como valor a recuperar'}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 Operação: <strong className="text-slate-700 dark:text-slate-300 font-mono">{op.ativo}</strong> ({op.tipoOpcao})
@@ -196,14 +196,14 @@ export function ModalVincularDivida({
             <div className="space-y-3">
               {dividasAtivas.length === 0 ? (
                 <div className="p-4 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-900/40 text-xs text-amber-800 dark:text-amber-300">
-                  <p className="font-bold mb-1">Nenhuma dívida ativa cadastrada no momento.</p>
-                  <p>Lucro de opções só pode ser usado para abater dívidas já existentes. Cadastre primeiro a dívida no menu lateral <strong>"Dívidas"</strong>, ou encerre a operação normalmente.</p>
+                  <p className="font-bold mb-1">Nenhuma meta ativa cadastrada no momento.</p>
+                  <p>Lucros de opções podem ser usados para recuperar valores e estruturas existentes. Cadastre primeiro no menu lateral <strong>"Recuperar"</strong>, ou encerre a operação normalmente.</p>
                 </div>
               ) : (
                 <>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Selecione a Dívida a Amortizar *
+                      Selecione a Meta / Valor a Recuperar *
                     </label>
                     <select
                       value={selectedDividaId}
@@ -221,7 +221,7 @@ export function ModalVincularDivida({
                   <div>
                     <div className="flex justify-between items-center mb-1">
                       <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                        Valor a Vincular / Amortizar (R$) *
+                        Valor a Destinar para Recuperação (R$) *
                       </label>
                       <button
                         type="button"
@@ -265,7 +265,7 @@ export function ModalVincularDivida({
                       : 'text-slate-500 dark:text-slate-400 disabled:opacity-40 disabled:cursor-not-allowed'
                   }`}
                 >
-                  Somar a dívida existente {dividasAtivas.length === 0 && '(nenhuma)'}
+                  Somar a meta existente {dividasAtivas.length === 0 && '(nenhuma)'}
                 </button>
                 <button
                   type="button"
@@ -276,7 +276,7 @@ export function ModalVincularDivida({
                       : 'text-slate-500 dark:text-slate-400'
                   }`}
                 >
-                  Criar nova dívida
+                  Criar novo valor a recuperar
                 </button>
               </div>
 
@@ -284,7 +284,7 @@ export function ModalVincularDivida({
                 <div className="space-y-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Selecione a Dívida que Receberá o Prejuízo *
+                      Selecione o Valor / Estrutura a Recuperar *
                     </label>
                     <select
                       value={selectedDividaId}
@@ -302,7 +302,7 @@ export function ModalVincularDivida({
                   <div>
                     <div className="flex justify-between items-center mb-1">
                       <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                        Valor do Prejuízo a Adicionar à Dívida (R$) *
+                        Valor a Adicionar para Recuperação (R$) *
                       </label>
                       <button
                         type="button"
@@ -328,18 +328,18 @@ export function ModalVincularDivida({
                   </div>
                 </div>
               ) : (
-                /* Aba: Criar nova dívida */
+                /* Aba: Criar novo valor a recuperar */
                 <div className="space-y-3 bg-slate-50 dark:bg-slate-800/40 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Nome da Nova Dívida *
+                      Nome do Novo Valor a Recuperar *
                     </label>
                     <input
                       type="text"
                       required
                       value={novoNome}
                       onChange={(e) => setNovoNome(e.target.value)}
-                      placeholder="Ex: Prejuízo BEEF3 V401"
+                      placeholder="Ex: Recuperar BEEF3 V401"
                       className="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500"
                     />
                   </div>
@@ -347,7 +347,7 @@ export function ModalVincularDivida({
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Valor do Prejuízo (R$) *
+                        Valor a Recuperar (R$) *
                       </label>
                       <div className="relative">
                         <span className="absolute left-2.5 top-1.5 text-xs text-slate-400 font-semibold">R$</span>

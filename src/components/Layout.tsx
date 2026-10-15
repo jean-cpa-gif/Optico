@@ -42,7 +42,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { name: 'Nova Operação', href: '/nova', icon: PlusCircle },
     { name: 'Operações Abertas', href: '/abertas', icon: FolderOpen },
     { name: 'Histórico', href: '/historico', icon: History },
-    { name: 'Dívidas', href: '/dividas', icon: Landmark },
+    { name: 'Recuperar', href: '/dividas', icon: Landmark },
     { name: 'Importar / Exportar', href: '/import-export', icon: Settings2 },
   ];
 

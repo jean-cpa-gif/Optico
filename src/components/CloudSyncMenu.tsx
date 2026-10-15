@@ -194,7 +194,16 @@ export default function CloudSyncMenu() {
       showToast('Login com Google realizado com sucesso!');
       setShowAuthModal(false);
     } catch (err: any) {
-      setAuthError(err.message || 'Falha no login com Google.');
+      if (err.code === 'auth/unauthorized-domain') {
+        const domainAtual = window.location.hostname;
+        setAuthError(
+          `Domínio não autorizado pelo Firebase (${domainAtual}). No Firebase Console, vá em Authentication > Settings > Authorized domains e adicione "${domainAtual}". Dica: Você também pode usar login por Email e Senha abaixo sem restrição de domínio.`
+        );
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        setAuthError('Janela de login fechada antes da confirmação.');
+      } else {
+        setAuthError(err.message || 'Falha no login com Google.');
+      }
     } finally {
       setAuthSubmitting(false);
     }

@@ -95,7 +95,7 @@ export function CardDivida({
   let dataEstimada: string | null = null;
 
   if (divida.status === 'quitada' || divida.saldoAtual <= 0) {
-    projecaoTexto = 'Dívida já quitada 🎉';
+    projecaoTexto = 'Valor 100% recuperado 🎉';
   } else if (amortizacaoMensalBase > 0) {
     const juroEstimadoMensal = divida.saldoAtual * (divida.taxaJurosMensalPercent / 100);
     const amortizacaoLiquida = amortizacaoMensalBase - juroEstimadoMensal;
@@ -333,9 +333,9 @@ export function CardDivida({
             <button
               onClick={() => onMarcarQuitada(divida.id, false)}
               className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-medium cursor-pointer"
-              title="Reabrir dívida"
+              title="Reabrir meta de recuperação"
             >
-              Reabrir Dívida
+              Reabrir Meta
             </button>
           )}
 
@@ -346,7 +346,7 @@ export function CardDivida({
             type="button"
             onClick={() => setModalEditarDividaOpen(true)}
             className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors cursor-pointer"
-            title="Editar informações da dívida cadastrada"
+            title="Editar informações cadastradas"
           >
             <Edit2 className="w-3.5 h-3.5" />
             <span>Editar</span>
@@ -358,23 +358,23 @@ export function CardDivida({
             onClick={() => {
               setModalConfirmacao({
                 isOpen: true,
-                titulo: 'Excluir Dívida',
+                titulo: 'Excluir Meta a Recuperar',
                 descricao: (
                   <div className="space-y-2">
                     <p>
-                      Tem certeza que deseja excluir a dívida <strong className="text-slate-900 dark:text-white">"{divida.nome}"</strong>?
+                      Tem certeza que deseja excluir <strong className="text-slate-900 dark:text-white">"{divida.nome}"</strong>?
                     </p>
                     <p className="text-rose-600 dark:text-rose-400 text-xs">
-                      Esta ação removerá esta dívida e todos os seus lançamentos de juros e amortizações.
+                      Esta ação removerá este item e todos os seus lançamentos de amortizações e juros.
                     </p>
                   </div>
                 ),
-                textoBotaoConfirmar: 'Sim, Excluir Dívida',
+                textoBotaoConfirmar: 'Sim, Excluir',
                 onConfirm: () => onExcluirDivida(divida.id)
               });
             }}
             className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
-            title="Excluir Dívida"
+            title="Excluir"
           >
             <Trash2 className="w-3.5 h-3.5" />
             <span>Excluir</span>
